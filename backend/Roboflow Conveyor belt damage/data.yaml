@@ -1,0 +1,14 @@
+path: c:/Users/Aarthy/Desktop/project-refine-main/backend/Roboflow Conveyor belt damage
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 8
+names: ['Hole', 'Human', 'Other Objects', 'Puncture', 'Roller', 'Tear', 'impact damage', 'patch work']
+
+roboflow:
+  workspace: sample-wy2mp
+  project: conveyor-belt-damage
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/sample-wy2mp/conveyor-belt-damage/dataset/1

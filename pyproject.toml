@@ -1,0 +1,9 @@
+[tool.pyright]
+include = ["backend"]
+extraPaths = [
+    "backend",
+    "backend/BeltCrack-master"
+]
+executionEnvironments = [
+  { root = "backend", extraPaths = ["backend/BeltCrack-master"] }
+]

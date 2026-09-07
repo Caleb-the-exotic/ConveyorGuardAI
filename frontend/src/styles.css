@@ -1,0 +1,289 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * ConveyorGuard AI — industrial control-room design system.
+ * Dark graphite base, lighter monitoring panels, status-driven accents.
+ * All colors are oklch semantic tokens.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-panel: var(--panel);
+  --color-panel-raised: var(--panel-raised);
+  --color-grid: var(--grid);
+  --color-normal: var(--normal);
+  --color-normal-soft: var(--normal-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-critical: var(--critical);
+  --color-critical-soft: var(--critical-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-hover: var(--info-hover);
+  --color-steel: var(--steel);
+  --color-steel-dark: var(--steel-dark);
+  --font-mono:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans:
+    "Barlow", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+:root {
+  --radius: 0.25rem;
+  --background: #111315;
+  --foreground: #f1f3f4;
+  --card: #202428;
+  --card-foreground: #f1f3f4;
+  --popover: #202428;
+  --popover-foreground: #f1f3f4;
+  --primary: #f28c28;
+  --primary-foreground: #14171a;
+  --secondary: #202428;
+  --secondary-foreground: #f1f3f4;
+  --muted: #202428;
+  --muted-foreground: #9aa1a8;
+  --accent: #262b30;
+  --accent-foreground: #f1f3f4;
+  --destructive: #e05252;
+  --destructive-foreground: #14171a;
+  --border: #30353a;
+  --input: #30353a;
+  --ring: #f28c28;
+
+  --panel: #191c1f;
+  --panel-raised: #202428;
+  --grid: #30353a;
+
+  --normal: #35c76f;
+  --normal-soft: #35c76f26;
+  --warning: #f2b84b;
+  --warning-soft: #f2b84b26;
+  --critical: #e05252;
+  --critical-soft: #e0525229;
+  --info: #f28c28;
+  --info-soft: #f28c2824;
+  --info-hover: #ffaa45;
+  --steel: #3a4046;
+  --steel-dark: #262b30;
+
+  --chart-1: var(--info);
+  --chart-2: var(--normal);
+  --chart-3: var(--warning);
+  --chart-4: var(--critical);
+  --chart-5: #7f8890;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-background);
+    background-image:
+      radial-gradient(
+        1100px 620px at 15% -10%,
+        color-mix(in oklab, var(--info) 5%, transparent),
+        transparent 70%
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--background) 94%, black),
+        var(--background) 35%
+      );
+    background-attachment: fixed;
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    letter-spacing: 0.005em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--info) 40%, transparent);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--background);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--steel);
+    border: 2px solid var(--background);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--info) 45%, var(--steel));
+  }
+}
+
+@utility panel {
+  background-color: var(--panel);
+  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  border-radius: calc(var(--radius) + 2px);
+  box-shadow: 0 10px 26px -22px oklch(0 0 0 / 80%);
+}
+
+/* container-less section: pure whitespace + typography */
+@utility panel-bare {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+@utility panel-head {
+  background: transparent;
+}
+
+@utility tile {
+  background-color: color-mix(in oklab, var(--card) 60%, transparent);
+  border: 1px solid transparent;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+@utility tile-hover {
+  &:hover {
+    background-color: var(--card);
+    border-color: color-mix(in oklab, var(--info) 28%, transparent);
+  }
+}
+
+/* flat metric cell separated by a divider instead of a box */
+@utility metric-cell {
+  position: relative;
+  padding: 0.25rem 0;
+}
+
+@utility divider-y {
+  border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+}
+
+
+@utility label-caps {
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+@utility tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@utility hatch {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--steel-dark) 0px,
+    var(--steel-dark) 6px,
+    var(--steel) 6px,
+    var(--steel) 12px
+  );
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 currentColor;
+    opacity: 0.9;
+  }
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+    opacity: 1;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    opacity: 0.9;
+  }
+}
+
+@utility pulse-dot {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes belt-scroll {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -48px 0;
+  }
+}
+
+@utility belt-surface {
+  background-image: repeating-linear-gradient(
+    90deg,
+    oklch(0.26 0.008 250) 0px,
+    oklch(0.26 0.008 250) 18px,
+    oklch(0.22 0.008 250) 18px,
+    oklch(0.22 0.008 250) 24px
+  );
+  animation: belt-scroll 1.6s linear infinite;
+}
+
+@keyframes scan-line {
+  0% {
+    transform: translateY(-10%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(1000%);
+    opacity: 0;
+  }
+}
+
+@utility scan-line {
+  animation: scan-line 4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

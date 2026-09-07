@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+*.egg-info/
+data/
+runs/
+*.pt
+.gemini/
+.cursor/
+.specify/   
+specs/001-belt-damage-detection/
+specs/004-belt-damage-pipeline/
+specs/005-belt-damage-pipeline/
+
+# Large data and output directories
+train/
+outputs/
+final_output/
+weights/
+*.jpg
+*.png
+take_home_assignment_CHM.pdf

@@ -1,0 +1,25 @@
+# Large model files
+*.pt
+*.pth
+*.zip
+
+# ML models directory
+ML models zip/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
