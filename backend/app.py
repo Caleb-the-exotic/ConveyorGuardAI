@@ -17,6 +17,8 @@ from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
+import arduino_serial
+
 # Set current backend path
 BACKEND_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BACKEND_DIR))
@@ -435,6 +437,67 @@ async def ws_evaluate(websocket: WebSocket):
         pass
     except Exception as e:
         print("[WS] Error:", e)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arduino Serial API
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.on_event("startup")
+async def _startup():
+    """Hand the running asyncio loop to the arduino_serial module."""
+    arduino_serial.set_event_loop(asyncio.get_event_loop())
+
+
+@app.get("/api/arduino/ports")
+async def arduino_ports():
+    """List available serial ports."""
+    return {"ports": arduino_serial.list_ports()}
+
+
+@app.post("/api/arduino/connect")
+async def arduino_connect(body: Dict[str, Any]):
+    """Connect to the specified COM port."""
+    port = body.get("port", "")
+    baud = int(body.get("baud", 115200))
+    if not port:
+        return {"ok": False, "error": "port is required"}
+    result = arduino_serial.connect(port, baud)
+    return result
+
+
+@app.post("/api/arduino/disconnect")
+async def arduino_disconnect():
+    """Disconnect from the current serial port."""
+    return arduino_serial.disconnect()
+
+
+@app.get("/api/arduino/status")
+async def arduino_status():
+    return arduino_serial.get_status()
+
+
+@app.websocket("/ws/arduino")
+async def arduino_ws(websocket: WebSocket):
+    """
+    WebSocket that streams live Arduino sensor readings as JSON.
+    Each message: { temperature, vibration, load, speed, acoustic, tension,
+                    alignment, health, risk, current, motor, status, ... }
+    """
+    await websocket.accept()
+    q = arduino_serial.subscribe()
+    try:
+        while True:
+            try:
+                reading = await asyncio.wait_for(q.get(), timeout=5.0)
+                await websocket.send_json(reading)
+            except asyncio.TimeoutError:
+                # Send a keepalive ping so the client knows we are alive
+                await websocket.send_json({"keepalive": True})
+    except (WebSocketDisconnect, Exception):
+        pass
+    finally:
+        arduino_serial.unsubscribe(q)
 
 
 if __name__ == "__main__":

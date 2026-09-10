@@ -1,6 +1,7 @@
 import { useConveyor } from "@/lib/conveyor/store";
 import type { Alert, MaintenanceTask, Sensor } from "@/lib/conveyor/types";
 import { Metric, Panel, StatusBadge } from "./primitives";
+import { ArduinoPanel } from "./ArduinoPanel";
 
 function generateReport(data: {
   riskLevel: string;
@@ -13,6 +14,8 @@ function generateReport(data: {
   tasks: MaintenanceTask[];
   mode: string;
   scenario: string | null;
+  arduinoHealth?: number | null;
+  arduinoRisk?: number | null;
 }): string {
   const now = new Date();
   const ts = now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
@@ -49,6 +52,11 @@ function generateReport(data: {
           .map((t) => `  [${t.priority}] ${t.issue} — ${t.status}`)
           .join("\n");
 
+  const arduinoSection =
+    data.arduinoHealth !== null && data.arduinoHealth !== undefined
+      ? `\n${line()}\n  ARDUINO TELEMETRY\n${line()}\n  Belt Health (Arduino) : ${data.arduinoHealth?.toFixed(1)}%\n  Failure Risk (Arduino): ${data.arduinoRisk?.toFixed(1)}%\n`
+      : "";
+
   return `
 ${line("=", 60)}
   CONVEYORGUARD AI — BELT HEALTH ANALYSIS REPORT
@@ -65,7 +73,7 @@ ${line()}
   Failure Risk (24h)    : ${failPct}
   Risk Level            : ${data.riskLevel}
   Prediction Status     : ${data.status}
-
+${arduinoSection}
 ${line()}
   SENSOR TELEMETRY
 ${line()}
@@ -101,8 +109,16 @@ ${line("=", 60)}
 }
 
 export function ConveyorHealth() {
-  const { prediction, activeScenario, sensors, alerts, tasks, mode, scenario } =
-    useConveyor();
+  const {
+    prediction,
+    activeScenario,
+    sensors,
+    alerts,
+    tasks,
+    mode,
+    scenario,
+    arduinoData,
+  } = useConveyor();
 
   function handleStartAnalysis() {
     const report = generateReport({
@@ -116,6 +132,8 @@ export function ConveyorHealth() {
       tasks,
       mode,
       scenario: activeScenario,
+      arduinoHealth: arduinoData?.health ?? null,
+      arduinoRisk: arduinoData?.risk ?? null,
     });
 
     const blob = new Blob([report], { type: "text/plain" });
@@ -129,55 +147,65 @@ export function ConveyorHealth() {
     URL.revokeObjectURL(url);
   }
 
+  // Show Arduino-derived health when connected, otherwise fall back to simulation prediction
+  const hasArduino = arduinoData !== null;
+  const displayHealth     = hasArduino ? arduinoData!.health         : prediction.beltHealth;
+  const displayRisk       = hasArduino ? arduinoData!.risk           : (prediction.failureProbability !== null ? prediction.failureProbability * 100 : null);
+  const displayCondition  = hasArduino
+    ? (arduinoData!.risk >= 70 ? "CRITICAL" : arduinoData!.risk >= 35 ? "WARNING" : "NORMAL") as "CRITICAL" | "WARNING" | "NORMAL" | "UNKNOWN"
+    : (activeScenario ? prediction.riskLevel : "UNKNOWN");
+
   return (
     <Panel
       bare
       title="Conveyor Health"
-      subtitle="Monitoring one belt — Iron Ore Primary Transport Line"
+      subtitle={
+        hasArduino
+          ? "Live — Arduino connected"
+          : activeScenario
+            ? "Simulation mode active"
+            : "Awaiting data source"
+      }
       actions={
         <StatusBadge
-          condition={prediction.riskLevel}
-          label={activeScenario ? `Risk ${prediction.riskLevel}` : "Awaiting data"}
-          pulse={prediction.riskLevel === "CRITICAL"}
+          condition={displayCondition}
+          label={
+            hasArduino
+              ? arduinoData!.status
+              : activeScenario
+                ? `Risk ${prediction.riskLevel}`
+                : "Awaiting data"
+          }
+          pulse={displayCondition === "CRITICAL"}
         />
       }
     >
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-4">
+        {/* Summary metrics */}
         <Metric
           flat
           label="Overall Belt Health"
-          value={prediction.beltHealth}
+          value={displayHealth !== null ? Math.round(displayHealth as number) : null}
           unit="%"
-          condition={activeScenario ? prediction.riskLevel : "UNKNOWN"}
-          hint={activeScenario ? "Structural integrity index" : "Awaiting live data"}
-        />
-        <Metric
-          flat
-          label="Joint Health"
-          value={prediction.jointHealth}
-          unit="%"
-          condition={activeScenario ? prediction.riskLevel : "UNKNOWN"}
-          hint={activeScenario ? "Weakest of 5 splices" : "Awaiting live data"}
+          condition={displayCondition}
+          hint={hasArduino ? "Live from Arduino" : activeScenario ? "Structural integrity index" : "Awaiting live data"}
         />
         <Metric
           flat
           label="Failure Risk"
-          value={
-            prediction.failureProbability === null
-              ? null
-              : `${Math.round(prediction.failureProbability * 100)}`
-          }
+          value={displayRisk !== null ? Math.round(displayRisk as number) : null}
           unit="%"
-          condition={activeScenario ? prediction.riskLevel : "UNKNOWN"}
-          hint={activeScenario ? "Next 24 h probability" : "Awaiting prediction"}
+          condition={displayCondition}
+          hint={hasArduino ? "Computed on-device" : activeScenario ? "Next 24 h probability" : "Awaiting prediction"}
         />
-        <Metric
-          flat
-          label="Prediction Status"
-          value={activeScenario ? prediction.riskLevel : "IDLE"}
-          condition={activeScenario ? prediction.riskLevel : "UNKNOWN"}
-          hint={prediction.status}
-        />
+
+        {/* Arduino sensor panel */}
+        <div className="border-t border-border/40 pt-3">
+          <div className="mb-2 text-[0.5rem] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            Arduino Sensor Feed
+          </div>
+          <ArduinoPanel />
+        </div>
       </div>
 
       {/* Start Analysis button */}

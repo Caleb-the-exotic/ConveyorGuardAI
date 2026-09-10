@@ -31,12 +31,12 @@ function Index() {
       {/* Hero section covering full display height without outer container box */}
       <Hero />
 
-      {/* Combined AI Vision (left 50%) and Conveyor Health (right 50%) */}
+      {/* Combined AI Vision (3/4th screen) and Conveyor Health (1/4th screen) */}
       <div id="ai-vision-section" className="grid items-start gap-6 lg:grid-cols-12">
-        <div className="lg:col-span-6 xl:col-span-6">
+        <div className="lg:col-span-9 xl:col-span-9">
           <AIVision />
         </div>
-        <div className="lg:col-span-6 xl:col-span-6">
+        <div className="lg:col-span-3 xl:col-span-3">
           <ConveyorHealth />
         </div>
       </div>

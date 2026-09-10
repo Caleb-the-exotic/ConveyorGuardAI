@@ -20,6 +20,7 @@ import type {
   Sensor,
   SensorKey,
 } from "./types";
+import type { ArduinoReading } from "./useArduino";
 import {
   SENSOR_META,
   buildAlerts,
@@ -76,6 +77,9 @@ interface Ctx {
   overallCondition: Condition;
   workOrderOpen: boolean;
   setWorkOrderOpen: (v: boolean) => void;
+  // Arduino live data
+  arduinoData: ArduinoReading | null;
+  setArduinoData: (r: ArduinoReading | null) => void;
 }
 
 const ConveyorContext = createContext<Ctx | null>(null);
@@ -91,6 +95,7 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
   const [extraTasks, setExtraTasks] = useState<MaintenanceTask[]>([]);
   const [acknowledged, setAcknowledged] = useState<string[]>([]);
   const [workOrderOpen, setWorkOrderOpen] = useState(false);
+  const [arduinoData, setArduinoDataState] = useState<ArduinoReading | null>(null);
   const phase = useRef(0);
 
   const activeScenario = mode === "SIMULATION" ? scenario : null;
@@ -121,6 +126,63 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
     const id = setInterval(tick, 1200);
     return () => clearInterval(id);
   }, [mode, scenario]);
+
+  // ── Arduino live sensor injection ─────────────────────────────────────────
+  useEffect(() => {
+    if (mode !== "LIVE" || !arduinoData) return;
+
+    const now = Date.now();
+
+    // Derive condition for each sensor key from Arduino values
+    function deriveCondition(key: SensorKey, val: number): Condition {
+      switch (key) {
+        case "temperature":
+          return val >= 60 ? "CRITICAL" : val >= 45 ? "WARNING" : "NORMAL";
+        case "vibration":
+          return val >= 6.0 ? "CRITICAL" : val >= 3.0 ? "WARNING" : "NORMAL";
+        case "load":
+          return val >= 2.0 ? "CRITICAL" : val >= 1.5 ? "WARNING" : "NORMAL";
+        case "speed":
+          // 0 speed when motor should be running = critical
+          return val === 0 ? "UNKNOWN" : val < 0.05 ? "CRITICAL" : "NORMAL";
+        case "acoustic":
+          return val >= 75 ? "CRITICAL" : val >= 60 ? "WARNING" : "NORMAL";
+        case "tension":
+          // Distance (belt sag): too low or too high = fault
+          return val < 5 || val > 35 ? "CRITICAL" : val < 10 || val > 25 ? "WARNING" : "NORMAL";
+        case "alignment":
+          return val >= 12 ? "CRITICAL" : val >= 5 ? "WARNING" : "NORMAL";
+        default:
+          return "NORMAL";
+      }
+    }
+
+    const keyMap: Record<SensorKey, number> = {
+      temperature: arduinoData.temperature,
+      vibration:   arduinoData.vibration,
+      load:        arduinoData.load,
+      speed:       arduinoData.speed,
+      acoustic:    arduinoData.acoustic,
+      tension:     arduinoData.tension,
+      alignment:   arduinoData.alignment,
+    };
+
+    setSensors((prev) =>
+      prev.map((s) => {
+        const raw = keyMap[s.key];
+        if (raw === undefined) return s;
+        const value = raw;
+        const status = deriveCondition(s.key, value);
+        const history = [...s.history, { t: now, value }].slice(-MAX_POINTS);
+        return { ...s, value, status, history };
+      }),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arduinoData]);
+
+  const setArduinoData = useCallback((r: ArduinoReading | null) => {
+    setArduinoDataState(r);
+  }, []);
 
   const joints = useMemo(() => buildJoints(activeScenario), [activeScenario]);
   const detections = useMemo(() => buildDetections(activeScenario), [activeScenario]);
@@ -229,6 +291,8 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
     overallCondition,
     workOrderOpen,
     setWorkOrderOpen,
+    arduinoData,
+    setArduinoData,
   };
 
   return <ConveyorContext.Provider value={value}>{children}</ConveyorContext.Provider>;

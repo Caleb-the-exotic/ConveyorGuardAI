@@ -68,7 +68,7 @@ function Sparkline({ data, className }: { data: SensorReading[]; className?: str
 }
 
 export function SensorTelemetry() {
-  const { sensors, highlightedSensor, highlightSensor, activeScenario } = useConveyor();
+  const { sensors, highlightedSensor, highlightSensor, activeScenario, arduinoData } = useConveyor();
 
   // Chart state
   const [tab, setTab] = useState<SensorKey>("vibration");
@@ -100,7 +100,13 @@ export function SensorTelemetry() {
       bare
       id="telemetry"
       title="Live Sensor Telemetry"
-      subtitle={activeScenario ? "Streaming simulated field readings" : "Awaiting live data"}
+      subtitle={
+        arduinoData
+          ? "Live Arduino sensor data streaming"
+          : activeScenario
+            ? "Streaming simulated field readings"
+            : "Awaiting live data"
+      }
     >
       {/* Sensor card grid */}
       <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -220,7 +226,7 @@ export function SensorTelemetry() {
 
         {/* Subtitle */}
         <p className="mb-3 text-[0.6875rem] text-muted-foreground">
-          {activeScenario
+          {arduinoData || activeScenario
             ? `${chartSensor.name} — rolling ${RANGES.find((r) => r.key === range)!.label.toLowerCase()} window`
             : "No live sensor data"}
         </p>

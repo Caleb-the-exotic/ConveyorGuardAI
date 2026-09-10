@@ -1,4 +1,5 @@
-import { Bell, CircleUser, Factory } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Bell, CircleUser, Factory, FlaskConical, Home } from "lucide-react";
 import { useConveyor } from "@/lib/conveyor/store";
 import { useAuth } from "@/lib/authContext";
 import { StatusDot } from "./primitives";
@@ -17,8 +18,7 @@ export function Header() {
     <header className="sticky top-0 z-40 border-b border-border bg-panel-raised/85 backdrop-blur-xl shadow-[0_1px_0_0_oklch(1_0_0/5%)_inset,0_8px_24px_-16px_oklch(0_0_0/80%)]">
       <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6 sm:py-3.5">
         {/* Brand / Logo */}
-        {/* Brand / Logo (non-link) */}
-        <div className="flex min-w-0 items-center gap-3">
+        <Link to="/" className="flex min-w-0 items-center gap-3 transition-opacity hover:opacity-90">
           <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-info/40 bg-info-soft text-info shadow-[0_0_20px_-6px_var(--info)]">
             <Factory className="size-5" aria-hidden />
           </span>
@@ -30,7 +30,33 @@ export function Header() {
               Real-Time Conveyor Health Monitoring
             </p>
           </div>
-        </div>
+        </Link>
+
+        {/* Navigation Links */}
+        <nav aria-label="Main Navigation" className="flex items-center gap-1.5 rounded-lg border border-border/70 bg-secondary/40 p-1">
+          <Link
+            to="/"
+            activeOptions={{ exact: true }}
+            className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground transition-all hover:bg-secondary hover:text-foreground"
+            activeProps={{
+              className: "border border-info/40 bg-info-soft text-info shadow-sm hover:text-info",
+            }}
+          >
+            <Home className="size-3.5" />
+            <span>Home</span>
+          </Link>
+
+          <Link
+            to="/simulation"
+            className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground transition-all hover:bg-secondary hover:text-foreground"
+            activeProps={{
+              className: "border border-warning/40 bg-warning-soft text-warning shadow-sm hover:text-warning",
+            }}
+          >
+            <FlaskConical className="size-3.5" />
+            <span>Simulation</span>
+          </Link>
+        </nav>
 
         {/* Right Action Icons & Status */}
         <div className="flex shrink-0 items-center gap-2.5">

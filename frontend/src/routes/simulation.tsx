@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import type { Scenario, Condition } from "@/lib/conveyor/types";
 import { Button } from "@/components/ui/button";
 import { StatusDot, StatusBadge } from "@/components/conveyor/primitives";
+import { ConveyorDigitalTwin } from "@/components/conveyor/ConveyorDigitalTwin";
 import { toast } from "sonner";
 
 const SCENARIOS: {
@@ -113,6 +114,8 @@ function SimulationPage() {
     alerts,
     prediction,
     overallCondition,
+    selectedJointId,
+    selectJoint,
   } = useConveyor();
 
   const activeScenarioData =
@@ -465,6 +468,16 @@ function SimulationPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* 3D Conveyor Digital Twin CAD Assembly Viewer */}
+          <div className="space-y-2 border-t border-border/50 pt-3">
+            <ConveyorDigitalTwin
+              scenario={scenario}
+              condition={activeScenarioData.condition}
+              selectedJointId={selectedJointId}
+              onSelectJoint={selectJoint}
+            />
           </div>
         </section>
 
