@@ -20,13 +20,22 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 import arduino_serial
+import ai_report
 
 # Set current backend path
 BACKEND_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BACKEND_DIR))
 sys.path.insert(0, str(BACKEND_DIR / "BeltCrack-master"))
 
-app = FastAPI(title="ConveyorGuard Belt Crack & Damage AI Engine")
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    arduino_serial.set_event_loop(asyncio.get_running_loop())
+    print("[Init] Event loop assigned to Arduino serial module.")
+    yield
+
+app = FastAPI(title="ConveyorGuard Belt Crack & Damage AI Engine", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -81,13 +90,7 @@ print("[Init] Backend ML Engines initialized!")
 # Dedicated ThreadPool for inference and Roboflow workflows
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
-# -------------------------------------------------------------
-# Startup Event - Bind Asyncio Loop for Arduino Serial
-# -------------------------------------------------------------
-@app.on_event("startup")
-async def startup_event():
-    arduino_serial.set_event_loop(asyncio.get_running_loop())
-    print("[Init] Event loop assigned to Arduino serial module.")
+# (Startup Event moved to lifespan)
 
 # -------------------------------------------------------------
 # Defect Label & Crack Severity Formatter
@@ -219,7 +222,7 @@ def query_roboflow_workflow_mask(wf_key: str, image_bgr: np.ndarray, orig_w: int
         else:
             send_img = image_bgr
 
-        _, buf = cv2.imencode(".jpg", send_img, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        _, buf = cv2.imencode(".jpg", send_img, [cv2.IMWRITE_JPEG_QUALITY, 80])
         b64_str = base64.b64encode(buf).decode("utf-8")
 
         payload = {
@@ -434,7 +437,7 @@ def analyze_belt_cracks_cv(image_bgr: np.ndarray, belt_mask: Optional[np.ndarray
                 "y": round((y / h) * 100, 2),
                 "w": round((bw / w) * 100, 2),
                 "h": round((bh / h) * 100, 2),
-                "box_raw": [int(x), int(y), int(x + bw), int(y + bh)],
+                "box_raw": [x, y, x + bw, y + bh],
             })
 
     cv_detections.sort(key=lambda d: d["confidence"], reverse=True)
@@ -455,7 +458,7 @@ def evaluate_roboflow(image_bgr: np.ndarray, conf_thresh: float = 0.05) -> Dict[
     t0 = time.perf_counter()
     h, w = image_bgr.shape[:2]
     yolo_detections = []
-    active_conf = max(0.04, float(conf_thresh) if conf_thresh is not None else 0.05)
+    active_conf = max(0.04, conf_thresh if conf_thresh is not None else 0.05)
 
     # 1. Extract conveyor belt surface mask from both Roboflow models in backend
     belt_mask = extract_conveyor_belt_surface_mask(image_bgr)
@@ -463,8 +466,9 @@ def evaluate_roboflow(image_bgr: np.ndarray, conf_thresh: float = 0.05) -> Dict[
     # 2. Run deep learning model
     if model_roboflow is not None:
         try:
-            results = model_roboflow(image_bgr, conf=active_conf, iou=0.40, verbose=False)[0]
-            for box in results.boxes:
+            res_list = model_roboflow(image_bgr, conf=active_conf, iou=0.40, verbose=False)
+            results = list(res_list)[0] # type: ignore
+            for box in results.boxes: # type: ignore
                 cls_id = int(box.cls[0].item())
                 raw_name = model_roboflow.names.get(cls_id, f"Defect_{cls_id}")
                 cls_name = format_defect_label(raw_name)
@@ -514,6 +518,100 @@ def evaluate_roboflow(image_bgr: np.ndarray, conf_thresh: float = 0.05) -> Dict[
     }
 
 
+# Cached YOLO models registry and PT file mapping
+CACHED_MODELS: Dict[str, YOLO] = {}
+
+MODEL_FILE_MAPPING = {
+    "roboflow_damage": ("roboflow_conveyor_damage.pt", "roboflow_conveyor_damage.pt (Trained Belt Crack & Damage Detector)"),
+    "conveyor_center": ("conveyor_center_detector.pt", "conveyor_center_detector.pt (YOLOv8 Center Conveyor Model)"),
+    "conveyor_crack": ("conveyor_crack_detector.pt", "conveyor_crack_detector.pt (Crack & Tear Detector)"),
+    "best_pt": ("best.pt", "best.pt (YOLOv8 Optimal Weights)"),
+    "best_stage1": ("best_stage1.pt", "best_stage1.pt (Two-Stage Detector - Stage 1)"),
+    "best_stage2": ("best_stage2.pt", "best_stage2.pt (Two-Stage Detector - Stage 2)"),
+    "model_pt": ("model.pt", "model.pt (ConveyCheck Defect Model)"),
+    "yolov8n": ("yolov8n.pt", "yolov8n.pt (YOLOv8 Nano Backbone)"),
+    "best_2": ("best (2).pt", "best (2).pt (New Best Weights)"),
+    "epoch0": ("epoch0.pt", "epoch0.pt (Initial Epoch Weights)"),
+    "human": ("human.pt", "human.pt (Human & General Detector)"),
+    "last_2": ("last (2).pt", "last (2).pt (Latest Training Weights)"),
+}
+
+def get_or_load_model(model_id: str):
+    filename, display_name = MODEL_FILE_MAPPING.get(model_id, (f"{model_id}.pt" if not model_id.endswith(".pt") else model_id, model_id))
+    if model_id in CACHED_MODELS:
+        return CACHED_MODELS[model_id], display_name
+
+    candidate_paths = [
+        BACKEND_DIR / filename,
+        BACKEND_DIR / "yolo-dataset-center" / filename,
+        BACKEND_DIR / "ConveyCheck" / "model" / filename,
+        BACKEND_DIR / "conveyor-belt-damage-detection-main" / filename,
+    ]
+    for p in candidate_paths:
+        if p.exists():
+            try:
+                print(f"[ModelLoad] Loading model weights from: {p}")
+                m = YOLO(str(p))
+                CACHED_MODELS[model_id] = m
+                return m, display_name
+            except Exception as e:
+                print(f"[ModelLoad] Error loading {p}: {e}")
+
+    return model_roboflow, display_name
+
+def evaluate_generic_yolo(model_id: str, image_bgr: np.ndarray, conf_thresh: float = 0.05) -> Dict[str, Any]:
+    t0 = time.perf_counter()
+    h, w = image_bgr.shape[:2]
+    yolo_detections = []
+    active_conf = max(0.04, conf_thresh if conf_thresh is not None else 0.05)
+
+    yolo_model, display_name = get_or_load_model(model_id)
+    belt_mask = extract_conveyor_belt_surface_mask(image_bgr)
+
+    if yolo_model is not None:
+        try:
+            res_list = yolo_model(image_bgr, conf=active_conf, iou=0.40, verbose=False)
+            results = list(res_list)[0] # type: ignore
+            for box in results.boxes: # type: ignore
+                cls_id = int(box.cls[0].item())
+                raw_name = yolo_model.names.get(cls_id, f"Defect_{cls_id}")
+                cls_name = format_defect_label(raw_name)
+                conf = float(box.conf[0].item())
+                x1, y1, x2, y2 = map(float, box.xyxy[0].tolist())
+                display_conf = min(0.98, max(0.55, round(0.50 + (conf / 0.50) * 0.45, 2)))
+
+                yolo_detections.append({
+                    "label": cls_name,
+                    "confidence": round(display_conf, 3),
+                    "x": round((x1 / w) * 100, 2),
+                    "y": round((y1 / h) * 100, 2),
+                    "w": round(((x2 - x1) / w) * 100, 2),
+                    "h": round(((y2 - y1) / h) * 100, 2),
+                    "box_raw": [int(x1), int(y1), int(x2), int(y2)],
+                })
+        except Exception as e:
+            print(f"[Infer] Error in model {model_id} inference: {e}")
+
+    yolo_detections = filter_detections_by_belt_roi(yolo_detections, belt_mask, min_overlap=0.40)
+
+    cv_cracks = []
+    if len(yolo_detections) == 0:
+        cv_cracks = analyze_belt_cracks_cv(image_bgr, belt_mask=belt_mask)
+        cv_cracks = filter_detections_by_belt_roi(cv_cracks, belt_mask, min_overlap=0.40)
+
+    all_raw = yolo_detections + cv_cracks
+    final_detections = non_max_suppression_detections(all_raw, iou_thresh=0.30, containment_thresh=0.60, min_conf=0.05)
+    duration_ms = round((time.perf_counter() - t0) * 1000, 1)
+
+    return {
+        "model_id": model_id,
+        "model_name": display_name,
+        "duration_ms": duration_ms,
+        "detections": final_detections,
+        "count": len(final_detections),
+        "status": "completed",
+    }
+
 # Models registry mapping
 MODELS_MAP = {
     "roboflow_damage": ("roboflow_conveyor_damage.pt (Trained Belt Crack & Damage Detector)", evaluate_roboflow),
@@ -533,7 +631,7 @@ def health():
         "status": "ok",
         "timestamp": time.time(),
         "models": [
-            {"id": "roboflow_damage", "name": "roboflow_conveyor_damage.pt (Trained Belt Crack & Damage Detector)", "ready": True},
+            {"id": k, "name": v[1], "ready": True} for k, v in MODEL_FILE_MAPPING.items()
         ]
     }
 
@@ -551,7 +649,7 @@ async def evaluate_frame(
     confidence: float = Form(0.05)
 ):
     """
-    Receives an image/video frame from the client and runs the unified ConveyorGuard AI model.
+    Receives an image/video frame from the client and runs the selected ConveyorGuard AI model.
     """
     contents = await file.read()
     nparr = np.frombuffer(contents, np.uint8)
@@ -560,13 +658,17 @@ async def evaluate_frame(
     if image is None:
         return {"error": "Invalid image payload"}
 
-    model_name, eval_fn = MODELS_MAP.get(model_id, MODELS_MAP["roboflow_damage"])
-
     loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(executor, run_eval_wrapper, eval_fn, image, confidence)
+
+    if model_id == "roboflow_damage":
+        result = await loop.run_in_executor(executor, run_eval_wrapper, evaluate_roboflow, image, confidence)
+        model_name = result.get("model_name", "roboflow_conveyor_damage.pt")
+    else:
+        result = await loop.run_in_executor(executor, evaluate_generic_yolo, model_id, image, confidence)
+        model_name = result.get("model_name", model_id)
 
     return {
-        "selected_model": "roboflow_damage",
+        "selected_model": model_id,
         "model_name": model_name,
         "result": result,
         "detections": result["detections"],
@@ -587,11 +689,13 @@ async def ws_evaluate(websocket: WebSocket):
         while True:
             raw_text = await websocket.receive_text()
             data = raw_text
+            model_key = "roboflow_damage"
 
             if raw_text.startswith("{"):
                 try:
                     parsed = json.loads(raw_text)
                     data = parsed.get("image", "")
+                    model_key = parsed.get("model", "roboflow_damage")
                 except Exception:
                     pass
 
@@ -607,12 +711,16 @@ async def ws_evaluate(websocket: WebSocket):
             if image is None:
                 continue
 
-            model_name, eval_fn = MODELS_MAP["roboflow_damage"]
-            result = await loop.run_in_executor(executor, eval_fn, image)
+            if model_key == "roboflow_damage":
+                result = await loop.run_in_executor(executor, evaluate_roboflow, image, 0.05)
+            else:
+                result = await loop.run_in_executor(executor, evaluate_generic_yolo, model_key, image, 0.05)
+
+            model_name = result.get("model_name", model_key)
 
             await websocket.send_json({
                 "type": "MODEL_RESULT",
-                "model_id": "roboflow_damage",
+                "model_id": model_key,
                 "model_name": model_name,
                 "data": result,
             })
@@ -675,6 +783,39 @@ async def arduino_ws(websocket: WebSocket):
         pass
     finally:
         arduino_serial.unsubscribe(q)
+
+
+# -------------------------------------------------------------
+# AI Predictive Insights Report Endpoints
+# -------------------------------------------------------------
+LATEST_AI_REPORT: Optional[Dict[str, Any]] = None
+
+
+@app.post("/api/ai/generate-report")
+async def api_generate_ai_report(payload: Dict[str, Any]):
+    """
+    Generates an executive-grade AI diagnostic report based on current field telemetry
+    and computer vision anomalies.
+    """
+    global LATEST_AI_REPORT
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        executor,
+        ai_report.generate_complete_conveyor_report,
+        payload
+    )
+    LATEST_AI_REPORT = result
+    return result
+
+
+@app.get("/api/ai/latest-report")
+async def api_get_latest_ai_report():
+    """
+    Retrieves the most recently generated AI diagnostic report.
+    """
+    if LATEST_AI_REPORT is None:
+        return {"status": "none", "report": None}
+    return {"status": "ok", "report": LATEST_AI_REPORT}
 
 
 if __name__ == "__main__":

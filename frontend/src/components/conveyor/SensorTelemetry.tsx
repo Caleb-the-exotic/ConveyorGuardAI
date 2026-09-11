@@ -6,6 +6,7 @@ import {
   Thermometer,
   Timer,
   Weight,
+  Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -29,6 +30,7 @@ const ICONS: Record<SensorKey, typeof Activity> = {
   load: Weight,
   speed: Timer,
   acoustic: AudioLines,
+  current: Zap,
   alignment: MoveHorizontal,
 };
 

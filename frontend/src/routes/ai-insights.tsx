@@ -7,6 +7,7 @@ import { CurrentDegradation } from "@/components/conveyor/CurrentDegradation";
 import { AIExplanation } from "@/components/conveyor/AIExplanation";
 import { AIRecommendation } from "@/components/conveyor/AIRecommendation";
 import { StatusBadge } from "@/components/conveyor/primitives";
+import { ExecutiveDiagnosticReport } from "@/components/conveyor/ExecutiveDiagnosticReport";
 
 const title = "AI Intelligence & Diagnostics — ConveyorGuard AI";
 const description =
@@ -68,7 +69,7 @@ function AIInsightsPage() {
             </p>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-3">
+          <div className="flex shrink-0 flex-wrap items-center gap-3 print:hidden">
             <div className="flex items-center gap-2 rounded-md border border-border bg-secondary/80 px-3 py-2">
               <Cpu className="size-4 text-info" />
               <div className="text-left">
@@ -88,6 +89,9 @@ function AIInsightsPage() {
           </div>
         </div>
       </div>
+
+      {/* Live Executive AI Diagnostic & Compliance Report */}
+      <ExecutiveDiagnosticReport />
 
       {/* Top AI Summary KPIs */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -9,6 +9,7 @@ export type SensorKey =
   | "load"
   | "speed"
   | "acoustic"
+  | "current"
   | "alignment";
 
 export interface SensorReading {
@@ -60,6 +61,16 @@ export interface Detection {
   box: { x: number; y: number; w: number; h: number }; // % of frame
 }
 
+export interface LiveDetection {
+  label: string;
+  confidence: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  box_raw?: number[];
+}
+
 export interface Alert {
   id: string;
   severity: Condition;
@@ -90,6 +101,8 @@ export interface BeltAspect {
   label: string;
   status: Condition;
   detail: string;
+  score?: number | null;
+  classification?: string;
 }
 
 export interface PredictionFactor {

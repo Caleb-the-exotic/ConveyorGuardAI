@@ -15,13 +15,14 @@ export const SENSOR_META: {
   name: string;
   unit: string;
 }[] = [
-  { key: "vibration", name: "Vibration", unit: "mm/s" },
-  { key: "temperature", name: "Temperature", unit: "°C" },
-  { key: "tension", name: "Belt Tension", unit: "kN" },
-  { key: "load", name: "Load", unit: "t/h" },
-  { key: "speed", name: "Belt Speed", unit: "m/s" },
-  { key: "acoustic", name: "Acoustic Condition", unit: "dB" },
-  { key: "alignment", name: "Alignment", unit: "mm" },
+  { key: "temperature", name: "Temperature (DS18B20)", unit: "°C" },
+  { key: "load", name: "Load Cell (HX711)", unit: "kg" },
+  { key: "vibration", name: "Vibration (MPU6050)", unit: "mm/s" },
+  { key: "current", name: "Current Draw (ACS712)", unit: "A" },
+  { key: "speed", name: "Belt Speed (Encoder)", unit: "m/s" },
+  { key: "acoustic", name: "Sound Level", unit: "dB" },
+  { key: "tension", name: "Distance (HC-SR04)", unit: "cm" },
+  { key: "alignment", name: "IR Tracking", unit: "mm" },
 ];
 
 type Band = { base: number; jitter: number; status: Condition };
@@ -29,30 +30,33 @@ type Band = { base: number; jitter: number; status: Condition };
 const PROFILES: Record<Scenario, Record<SensorKey, Band>> = {
   NORMAL: {
     vibration: { base: 2.1, jitter: 0.35, status: "NORMAL" },
-    temperature: { base: 46, jitter: 1.6, status: "NORMAL" },
-    tension: { base: 58, jitter: 1.8, status: "NORMAL" },
-    load: { base: 1420, jitter: 55, status: "NORMAL" },
-    speed: { base: 3.4, jitter: 0.06, status: "NORMAL" },
-    acoustic: { base: 71, jitter: 1.4, status: "NORMAL" },
-    alignment: { base: 2.0, jitter: 0.6, status: "NORMAL" },
+    temperature: { base: 30.5, jitter: 1.2, status: "NORMAL" },
+    tension: { base: 14.5, jitter: 0.8, status: "NORMAL" },
+    load: { base: 1.5, jitter: 0.25, status: "NORMAL" },
+    speed: { base: 1.8, jitter: 0.06, status: "NORMAL" },
+    acoustic: { base: 42, jitter: 2.0, status: "NORMAL" },
+    current: { base: 0.85, jitter: 0.12, status: "NORMAL" },
+    alignment: { base: 1.5, jitter: 0.4, status: "NORMAL" },
   },
   WARNING: {
     vibration: { base: 5.4, jitter: 0.8, status: "WARNING" },
-    temperature: { base: 62, jitter: 2.4, status: "WARNING" },
-    tension: { base: 73, jitter: 3.2, status: "WARNING" },
-    load: { base: 1610, jitter: 80, status: "NORMAL" },
-    speed: { base: 3.3, jitter: 0.12, status: "NORMAL" },
-    acoustic: { base: 82, jitter: 2.2, status: "WARNING" },
-    alignment: { base: 7.5, jitter: 1.2, status: "WARNING" },
+    temperature: { base: 52, jitter: 2.0, status: "WARNING" },
+    tension: { base: 24.0, jitter: 1.8, status: "WARNING" },
+    load: { base: 3.2, jitter: 0.35, status: "WARNING" },
+    speed: { base: 1.2, jitter: 0.12, status: "WARNING" },
+    acoustic: { base: 68, jitter: 3.5, status: "WARNING" },
+    current: { base: 2.8, jitter: 0.35, status: "WARNING" },
+    alignment: { base: 14.5, jitter: 1.2, status: "WARNING" },
   },
   CRITICAL: {
     vibration: { base: 9.8, jitter: 1.4, status: "CRITICAL" },
-    temperature: { base: 81, jitter: 3.2, status: "CRITICAL" },
-    tension: { base: 92, jitter: 4.5, status: "CRITICAL" },
-    load: { base: 1735, jitter: 110, status: "WARNING" },
-    speed: { base: 3.0, jitter: 0.22, status: "WARNING" },
-    acoustic: { base: 94, jitter: 3.0, status: "CRITICAL" },
-    alignment: { base: 14.2, jitter: 1.8, status: "CRITICAL" },
+    temperature: { base: 68, jitter: 3.2, status: "CRITICAL" },
+    tension: { base: 38.0, jitter: 2.5, status: "CRITICAL" },
+    load: { base: 4.8, jitter: 0.5, status: "CRITICAL" },
+    speed: { base: 0.2, jitter: 0.08, status: "CRITICAL" },
+    acoustic: { base: 88, jitter: 4.0, status: "CRITICAL" },
+    current: { base: 4.6, jitter: 0.45, status: "CRITICAL" },
+    alignment: { base: 24.0, jitter: 1.8, status: "CRITICAL" },
   },
 };
 

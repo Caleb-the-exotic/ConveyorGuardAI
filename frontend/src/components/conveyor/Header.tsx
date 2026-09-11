@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Bell, CircleUser, Factory, FlaskConical, Home } from "lucide-react";
+import { Bell, CircleUser, Factory, FlaskConical, Home, BrainCircuit } from "lucide-react";
 import { useConveyor } from "@/lib/conveyor/store";
 import { useAuth } from "@/lib/authContext";
 import { StatusDot } from "./primitives";
@@ -8,7 +8,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function Header() {
   const { mode, alerts } = useConveyor();
@@ -56,6 +62,17 @@ export function Header() {
             <FlaskConical className="size-3.5" />
             <span>Simulation</span>
           </Link>
+
+          <Link
+            to="/ai-insights"
+            className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground transition-all hover:bg-secondary hover:text-foreground"
+            activeProps={{
+              className: "border border-info/40 bg-info-soft text-info shadow-sm hover:text-info",
+            }}
+          >
+            <BrainCircuit className="size-3.5" />
+            <span>AI Insights</span>
+          </Link>
         </nav>
 
         {/* Right Action Icons & Status */}
@@ -65,8 +82,8 @@ export function Header() {
             Live System
           </span>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
+          <Popover>
+            <PopoverTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
@@ -80,9 +97,42 @@ export function Header() {
                   </span>
                 ) : null}
               </Button>
-            </TooltipTrigger>
-            <TooltipContent>{alerts.length} active alerts</TooltipContent>
-          </Tooltip>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80 p-0 overflow-hidden border-border/80 bg-panel/95 backdrop-blur-xl shadow-2xl">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-secondary/20">
+                <h3 className="font-bold text-sm tracking-tight">Notification History</h3>
+                <span className="text-xs text-muted-foreground">{alerts.length} Total</span>
+              </div>
+              <div className="max-h-[300px] overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+                {alerts.length > 0 ? (
+                  <div className="flex flex-col gap-1">
+                    {alerts.map((alert) => (
+                      <div key={alert.id} className="flex flex-col gap-1 rounded-md p-3 hover:bg-secondary/40 transition-colors">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className={cn(
+                            "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[0.625rem] font-bold uppercase tracking-wider",
+                            alert.severity === "CRITICAL" ? "bg-critical/20 text-critical border border-critical/30" : 
+                            alert.severity === "WARNING" ? "bg-warning/20 text-warning border border-warning/30" : 
+                            "bg-normal/20 text-normal border border-normal/30"
+                          )}>
+                            {alert.severity}
+                          </span>
+                          <span className="text-[0.65rem] text-muted-foreground font-mono truncate">{alert.timestamp}</span>
+                        </div>
+                        <p className="text-xs font-semibold text-foreground leading-tight mt-1">{alert.title}</p>
+                        <p className="text-[0.65rem] text-muted-foreground truncate">{alert.condition}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-6 text-center">
+                    <Bell className="size-8 text-muted-foreground/30 mb-2" />
+                    <p className="text-xs text-muted-foreground">No notifications yet</p>
+                  </div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
 
           <Tooltip>
             <TooltipTrigger asChild>

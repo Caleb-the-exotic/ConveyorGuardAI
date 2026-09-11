@@ -5,31 +5,22 @@ import {
   ScanLine,
   Cpu,
   AlertTriangle,
-  ChevronDown,
   Upload,
   SwitchCamera,
   CheckCircle2,
   AlertCircle,
   RefreshCw,
+  ChevronDown,
 } from "lucide-react";
 import { useConveyor } from "@/lib/conveyor/store";
 import { cn } from "@/lib/utils";
-import type { Condition } from "@/lib/conveyor/types";
-import { Panel } from "./primitives";
+import type { Condition, LiveDetection } from "@/lib/conveyor/types";
+import { Panel, getDefectStyle } from "./primitives";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useNotifications } from "@/lib/conveyor/useNotifications";
 
 type CVMode = "AI_OVERLAY" | "CANNY_EDGE" | "THERMAL_IR" | "RAW_RGB";
-
-interface Detection {
-  label: string;
-  confidence: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  box_raw?: number[];
-}
 
 interface ModelOption {
   id: string;
@@ -43,51 +34,75 @@ const AVAILABLE_MODELS: ModelOption[] = [
     id: "roboflow_damage",
     name: "roboflow_conveyor_damage.pt",
     filename: "roboflow_conveyor_damage.pt",
-    desc: "Trained Conveyor Belt Crack & Damage Detector",
+    desc: "Trained Belt Crack & Damage Detector",
+  },
+  {
+    id: "conveyor_center",
+    name: "conveyor_center_detector.pt",
+    filename: "conveyor_center_detector.pt",
+    desc: "YOLOv8 Center Conveyor Model",
+  },
+  {
+    id: "conveyor_crack",
+    name: "conveyor_crack_detector.pt",
+    filename: "conveyor_crack_detector.pt",
+    desc: "Crack & Tear Detector",
+  },
+  {
+    id: "best_pt",
+    name: "best.pt",
+    filename: "best.pt",
+    desc: "YOLOv8 Optimal Weights",
+  },
+  {
+    id: "best_stage1",
+    name: "best_stage1.pt",
+    filename: "best_stage1.pt",
+    desc: "Two-Stage Detector (Stage 1)",
+  },
+  {
+    id: "best_stage2",
+    name: "best_stage2.pt",
+    filename: "best_stage2.pt",
+    desc: "Two-Stage Detector (Stage 2)",
+  },
+  {
+    id: "model_pt",
+    name: "model.pt",
+    filename: "model.pt",
+    desc: "ConveyCheck Defect Model",
+  },
+  {
+    id: "yolov8n",
+    name: "yolov8n.pt",
+    filename: "yolov8n.pt",
+    desc: "YOLOv8 Nano Backbone",
+  },
+  {
+    id: "best_2",
+    name: "best (2).pt",
+    filename: "best (2).pt",
+    desc: "New Best Weights",
+  },
+  {
+    id: "epoch0",
+    name: "epoch0.pt",
+    filename: "epoch0.pt",
+    desc: "Initial Epoch Weights",
+  },
+  {
+    id: "human",
+    name: "human.pt",
+    filename: "human.pt",
+    desc: "Human & General Detector",
+  },
+  {
+    id: "last_2",
+    name: "last (2).pt",
+    filename: "last (2).pt",
+    desc: "Latest Training Weights",
   },
 ];
-
-function getDefectStyle(label: string) {
-  const l = label.toLowerCase();
-  if (l.includes("conveyor belt") || l === "belt" || l.includes("belt surface")) {
-    return {
-      border: "border-emerald-500 bg-emerald-500/15 ",
-      badge: "border-emerald-500 bg-emerald-600 text-white font-bold",
-      text: "text-emerald-400 font-bold",
-      severity: "NORMAL",
-    };
-  }
-  if (l.includes("crack") || l.includes("tear") || l.includes("fracture") || l.includes("fissure")) {
-    return {
-      border: "border-red-500 bg-red-500/10 ",
-      badge: "border-red-500 bg-red-600 text-white font-bold",
-      text: "text-red-500 font-bold",
-      severity: "CRITICAL",
-    };
-  }
-  if (l.includes("puncture") || l.includes("hole") || l.includes("gouge") || l.includes("perforation")) {
-    return {
-      border: "border-amber-500 bg-amber-500/10 ",
-      badge: "border-amber-500 bg-amber-500 text-black font-extrabold",
-      text: "text-amber-500 font-bold",
-      severity: "CRITICAL",
-    };
-  }
-  if (l.includes("patch") || l.includes("wear") || l.includes("damage") || l.includes("anomaly")) {
-    return {
-      border: "border-yellow-400 bg-yellow-400/10 ",
-      badge: "border-yellow-400 bg-yellow-400 text-black font-extrabold",
-      text: "text-yellow-400 font-bold",
-      severity: "WARNING",
-    };
-  }
-  return {
-    border: "border-cyan-400 bg-cyan-400/10 ",
-    badge: "border-cyan-400 bg-cyan-500 text-white font-bold",
-    text: "text-cyan-400 font-bold",
-    severity: "INFO",
-  };
-}
 
 function boxTone(c: Condition) {
   switch (c) {
@@ -99,17 +114,28 @@ function boxTone(c: Condition) {
 }
 
 export function AIVision() {
-  const { detections, activeDetectionId, focusDetection, selectedJointId, joints, activeScenario } =
-    useConveyor();
+  const {
+    detections,
+    activeDetectionId,
+    focusDetection,
+    selectedJointId,
+    joints,
+    activeScenario,
+    liveDetections,
+    setLiveDetections,
+    setHasAIEvaluated,
+  } = useConveyor();
 
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cvMode, setCvMode] = useState<CVMode>("AI_OVERLAY");
   const [fps, setFps] = useState<number>(0);
 
-  // Model Selection Dropdown State (Defaults to Trained Crack & Damage Detector)
   const [selectedModel, setSelectedModel] = useState<string>("roboflow_damage");
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
-  const [activeDetections, setActiveDetections] = useState<Detection[]>([]);
+
+  const { triggerCriticalAlert } = useNotifications();
+  const activeDetections = liveDetections;
+  const setActiveDetections = setLiveDetections;
   const [currentModelName, setCurrentModelName] = useState<string>("Roboflow Dual AI (Belt Isolation & Defect Engine)");
   const [inferenceLatency, setInferenceLatency] = useState<number | null>(null);
   const [anomalyCount, setAnomalyCount] = useState<number>(0);
@@ -195,11 +221,17 @@ export function AIVision() {
           if (payload.data) {
             const res = payload.data;
             setActiveDetections(res.detections || []);
+            
+            if (res.detections && res.detections.length > 0) {
+              triggerCriticalAlert(res.detections[0]);
+            }
+
             setInferenceLatency(res.duration_ms || null);
             setAnomalyCount(res.count || 0);
             if (payload.model_name) {
               setCurrentModelName(payload.model_name);
             }
+            setHasAIEvaluated(true);
           }
         } catch {
           // ignore
@@ -369,9 +401,15 @@ export function AIVision() {
         const data = await res.json();
         const results = data.detections || [];
         setActiveDetections(results);
+        
+        if (results.length > 0) {
+          triggerCriticalAlert(results[0]);
+        }
+
         setInferenceLatency(data.duration_ms || null);
         setAnomalyCount(data.count || results.length);
         if (data.model_name) setCurrentModelName(data.model_name);
+        setHasAIEvaluated(true);
         toast.success(`Evaluation complete: ${results.length} defect(s) detected`);
       } else {
         toast.error("Backend error during defect analysis");
@@ -535,9 +573,13 @@ export function AIVision() {
                     const data = await res.json();
                     if (data.detections) {
                       setActiveDetections(data.detections);
+                      if (data.detections.length > 0) {
+                        triggerCriticalAlert(data.detections[0]);
+                      }
                       setInferenceLatency(data.duration_ms);
                       setAnomalyCount(data.count);
                       setCurrentModelName(data.model_name);
+                      setHasAIEvaluated(true);
                     }
                   }
                 } catch {
@@ -636,56 +678,6 @@ export function AIVision() {
         </div>
       }
     >
-      {/* View Filter, Model Selection, and Status Controls */}
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/70 bg-secondary/50 p-2">
-        <div className="flex flex-wrap items-center gap-4">
-          {/* View Mode Dropdown */}
-          <div className="flex items-center gap-2">
-            <label htmlFor="view-select" className="flex items-center gap-1 text-[0.6875rem] font-bold uppercase tracking-wider text-foreground">
-              <ScanLine className="size-3.5 text-info" /> View:
-            </label>
-            <div className="relative">
-              <select
-                id="view-select"
-                value={cvMode}
-                onChange={(e) => setCvMode(e.target.value as CVMode)}
-                className="h-7 cursor-pointer appearance-none rounded border border-border bg-background py-0.5 pr-7 pl-2 text-xs font-semibold text-foreground transition-colors hover:border-info focus:border-info focus:outline-none"
-              >
-                <option value="AI_OVERLAY" className="bg-popover text-foreground">AI Overlay</option>
-                <option value="CANNY_EDGE" className="bg-popover text-foreground">Canny Edge</option>
-                <option value="THERMAL_IR" className="bg-popover text-foreground">Thermal IR</option>
-                <option value="RAW_RGB" className="bg-popover text-foreground">RGB</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute top-2 right-1.5 size-3.5 text-muted-foreground" />
-            </div>
-          </div>
-
-          {/* Unified AI Model Badge */}
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1 text-[0.6875rem] font-bold uppercase tracking-wider text-foreground">
-              <Cpu className="size-3.5 text-info" /> Model:
-            </span>
-            <div className="flex items-center gap-1.5 rounded border border-border/80 bg-background/90 px-2 py-0.5 text-xs font-semibold text-foreground shadow-xs">
-              <span className="size-1.5 rounded-full bg-info" />
-              <span>roboflow_conveyor_damage.pt</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Live Active Backend Status Indicator */}
-        <div className="flex items-center gap-2">
-          {backendConnected ? (
-            <span className="flex items-center gap-1.5 text-[0.6875rem] font-bold text-normal bg-normal/15 border border-normal/40 px-2.5 py-1 rounded-md shadow-xs">
-              <span className="size-2 rounded-full bg-normal animate-pulse" /> Backend Active
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 text-[0.6875rem] font-bold text-critical bg-critical/15 border border-critical/40 px-2.5 py-1 rounded-md shadow-xs">
-              <span className="size-2 rounded-full bg-critical" /> Backend Offline (port 8000)
-            </span>
-          )}
-        </div>
-      </div>
-
       {/* Vision Screen */}
       <div className="relative w-full overflow-hidden rounded-md border border-steel bg-zinc-950 shadow-inner min-h-[380px]">
 
@@ -856,17 +848,36 @@ export function AIVision() {
       {/* Live Single Execution Status Bar */}
       <div className="mt-3">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="tile rounded-md p-2.5 border border-info/40 bg-info-soft/20">
-            <div className="label-caps text-[0.5625rem]">Active Model</div>
-            <div className="text-xs font-bold text-info truncate">
-              {AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.filename}
+          <div className="tile rounded-md p-2.5 border border-info/40 bg-info-soft/20 relative group">
+            <label htmlFor="active-model-select" className="label-caps text-[0.5625rem] block text-muted-foreground cursor-pointer">
+              Active Model
+            </label>
+            <div className="relative mt-0.5 flex items-center">
+              <select
+                id="active-model-select"
+                value={selectedModel}
+                onChange={(e) => {
+                  const newModel = e.target.value;
+                  setSelectedModel(newModel);
+                  const opt = AVAILABLE_MODELS.find((m) => m.id === newModel);
+                  toast.info(`Active model changed to: ${opt?.filename || newModel}`);
+                }}
+                className="w-full bg-transparent text-xs font-bold text-info pr-5 focus:outline-none cursor-pointer appearance-none truncate border-none p-0 focus:ring-0"
+              >
+                {AVAILABLE_MODELS.map((model) => (
+                  <option key={model.id} value={model.id} className="bg-popover text-popover-foreground text-xs py-1">
+                    {model.filename}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-0 size-3 text-info opacity-70" aria-hidden />
             </div>
           </div>
 
           <div className="tile rounded-md p-2.5 border border-border/60">
             <div className="label-caps text-[0.5625rem]">Architecture / Role</div>
-            <div className="text-xs font-bold text-foreground truncate">
-              Belt Surface Defect Detector
+            <div className="text-xs font-bold text-foreground truncate" title={AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.desc || "Belt Surface Defect Detector"}>
+              {AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.desc || "Belt Surface Defect Detector"}
             </div>
           </div>
 
@@ -885,52 +896,7 @@ export function AIVision() {
           </div>
         </div>
       </div>
-
-      {/* Detected Defects Breakdown List */}
-      {activeDetections.length > 0 && (
-        <div className="mt-3 rounded-md border border-border/80 bg-background/60 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <h4 className="text-xs font-bold tracking-wider uppercase text-foreground flex items-center gap-1.5">
-              <AlertTriangle className="size-3.5 text-warning" /> Detected Conveyor Anomalies ({activeDetections.length})
-            </h4>
-            <span className="text-[0.625rem] text-muted-foreground font-mono">
-              Model: {selectedModel} · Precision NMS Filter Active
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {activeDetections.map((defect, i) => {
-              const style = getDefectStyle(defect.label);
-              return (
-                <div
-                  key={i}
-                  className={cn(
-                    "flex items-center justify-between rounded border p-2 bg-secondary/30 transition-all hover:bg-secondary/60",
-                    style.border
-                  )}
-                >
-                  <div className="flex flex-col">
-                    <span className={cn("text-xs", style.text)}>
-                      {defect.label}
-                    </span>
-                    <span className="text-[0.625rem] text-muted-foreground">
-                      Coordinates: X={Math.round(defect.x)}% Y={Math.round(defect.y)}% · W={Math.round(defect.w)}% H={Math.round(defect.h)}%
-                    </span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className={cn("rounded px-1.5 py-0.5 text-[0.5625rem]", style.badge)}>
-                      {Math.round(defect.confidence * 100)}%
-                    </span>
-                    <span className="text-[0.5625rem] uppercase font-bold text-muted-foreground mt-0.5">
-                      {style.severity}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </Panel>
   );
 }
+

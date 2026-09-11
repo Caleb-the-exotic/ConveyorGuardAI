@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowRight, BrainCircuit } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 
 function scrollTo(id: string) {
@@ -25,8 +26,8 @@ export function Hero() {
         className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[40rem] rounded-full bg-normal/5 blur-3xl"
       />
 
-      {/* Main hero content */}
-      <div className="relative my-auto grid grid-cols-1 items-center gap-10 py-6 lg:grid-cols-12 xl:gap-14">
+      {/* Main content grid */}
+      <div className="relative z-10 grid items-center gap-12 lg:grid-cols-12">
         {/* Left: Headline & CTAs */}
         <div className="flex flex-col items-start lg:col-span-7 xl:col-span-7">
           <h2 className="max-w-3xl text-4xl font-extrabold leading-[1.08] tracking-tight text-foreground sm:text-5xl lg:text-6xl">
@@ -51,13 +52,13 @@ export function Hero() {
               <ArrowRight className="size-4" aria-hidden />
             </Button>
 
-            <div
-              className="inline-flex min-h-12 items-center gap-2 rounded-md border border-border/70 bg-secondary/50 px-6 text-xs font-bold tracking-[0.16em] uppercase text-muted-foreground cursor-not-allowed select-none opacity-80"
-              aria-disabled="true"
+            <Link
+              to="/ai-insights"
+              className="inline-flex min-h-12 items-center gap-2 rounded-md border border-info/50 bg-info-soft/30 px-6 text-xs font-bold tracking-[0.16em] uppercase text-info hover:bg-info-soft/60 hover:text-white transition-all shadow-md cursor-pointer active:scale-95"
             >
-              <BrainCircuit className="size-4 text-muted-foreground" />
+              <BrainCircuit className="size-4 text-info" />
               AI Predictive Insights
-            </div>
+            </Link>
           </div>
         </div>
 

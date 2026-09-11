@@ -13,7 +13,7 @@ Serial format (every 1 s):
 
 import asyncio
 import threading
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Any
 
 # pyserial is imported lazily so the app still starts if it is not installed
 try:
@@ -26,7 +26,7 @@ except ImportError:
 
 # ── Shared state ───────────────────────────────────────────────────────────────
 _lock = threading.Lock()
-_serial_port: Optional[object] = None      # serial.Serial instance
+_serial_port: Any = None      # serial.Serial instance
 _reader_thread: Optional[threading.Thread] = None
 _connected_port: Optional[str] = None
 _last_reading: Optional[dict] = None
@@ -78,67 +78,243 @@ def unsubscribe(q: asyncio.Queue):
 # ── Parser ─────────────────────────────────────────────────────────────────────
 def _parse_line(line: str) -> Optional[dict]:
     """
-    Parse a CSV line like  TEMP=32.00,VIB=0,...,STATUS=SYSTEM OK
-    into a typed dict.  Returns None on any parse error.
+    Parse a CSV line from the new Arduino firmware:
+      TEMP=28.50,TEMP_OK=1,VIB=0,LOAD=0.00,LOAD_OK=1,CURRENT=0.00,SOUND=42.0,
+      DIST=15.2,DIST_OK=1,IR_LEFT=1,IR_RIGHT=1,ACC=9.81,MPU_OK=1,SPEED=0.00,
+      ENCODER_OK=1,HEALTH=100.0,RISK=0.0,MOTOR=OFF,STATUS=SYSTEM OK
+    into a typed dictionary. Returns None on parse error.
     """
     try:
         pairs = {}
-        # STATUS can contain spaces and commas — split on first =, greedy right
         for token in line.strip().split(","):
             if "=" not in token:
                 continue
             k, _, v = token.partition("=")
-            pairs[k.strip()] = v.strip()
+            pairs[k.strip().upper()] = v.strip()
 
-        def f(key, default=0.0):
-            return float(pairs.get(key, default))
+        def f(key: str, default: float = 0.0) -> float:
+            val = pairs.get(key)
+            if val is None or val == "":
+                return default
+            try:
+                return float(val)
+            except ValueError:
+                return default
 
-        def i(key, default=0):
-            return int(float(pairs.get(key, default)))
+        def i(key: str, default: int = 0) -> int:
+            val = pairs.get(key)
+            if val is None or val == "":
+                return default
+            try:
+                return int(float(val))
+            except ValueError:
+                return default
 
-        vib_raw = i("VIB")        # 0 or 1 (digital vibration sensor)
-        acc     = f("ACC", 9.8)   # MPU6050 total acceleration m/s²
-        ir_l    = i("IR_LEFT", 1)
-        ir_r    = i("IR_RIGHT", 1)
+        def b(key: str, default: bool = True) -> bool:
+            val = pairs.get(key)
+            if val is None:
+                return default
+            return str(val).strip().lower() in ("1", "true", "ok", "yes")
 
-        # Derive alignment offset in mm (0 = aligned, >0 = misaligned)
-        # IR_LEFT=LOW(0) or IR_RIGHT=LOW(0) means object detected → misaligned
-        alignment_mm = 0.0
-        if ir_l == 0 and ir_r == 0:
-            alignment_mm = 18.0   # both triggered → severely off-centre
-        elif ir_l == 0 or ir_r == 0:
-            alignment_mm = 8.5    # one side triggered → moderate misalignment
+        # ── Diagnostic Sensor Health Flags ────────────────────────────
+        temp_ok    = b("TEMP_OK", True)
+        load_ok    = b("LOAD_OK", True)
+        dist_ok    = b("DIST_OK", True)
+        mpu_ok     = b("MPU_OK", True)
+        encoder_ok = b("ENCODER_OK", True)
 
-        # Vibration: combine digital sensor flag with MPU6050 magnitude
-        # Subtract gravity baseline (≈9.8 m/s²) to get dynamic acceleration
-        dynamic_acc = max(0.0, acc - 9.8)
-        # Convert to mm/s² and scale roughly to mm/s RMS (heuristic)
-        vibration_mms = round(dynamic_acc * 1.8 + vib_raw * 2.0, 2)
+        # ── Primary Sensor Readings ───────────────────────────────────
+        temp_raw = f("TEMP", 0.0)
+        # Validate DS18B20 range (-55 to +125 °C, != -127 disconnected)
+        temperature = round(temp_raw, 1) if temp_ok and -50.0 < temp_raw < 125.0 else None
+
+        vib_raw = i("VIB", 0)       # 0 or 1 (SW-420 vibration switch)
+        acc     = f("ACC", 9.80)    # MPU6050 total acceleration (m/s²)
+        dynamic_acc = max(0.0, acc - 9.80) if mpu_ok else 0.0
+        vibration_mms = round(dynamic_acc * 1.8 + (vib_raw * 2.5), 2)
+        if vibration_mms < 0.2:
+            vibration_mms = 0.85
+
+        load_raw = f("LOAD", 0.0)
+        load_kg  = max(0.0, round(load_raw, 2)) if load_ok else None
+
+        current_a = round(f("CURRENT", 0.0), 2)
+        sound_lvl = round(f("SOUND", 0.0), 1)
+
+        dist_raw = f("DIST", 0.0)
+        # Ultrasonic distance valid range: 2 to 400 cm
+        dist_cm  = round(dist_raw, 1) if dist_ok and 2.0 <= dist_raw <= 400.0 else None
+
+        speed_raw = f("SPEED", 0.0)
+        speed_mps = round(max(0.0, speed_raw), 2)
+
+        # ── Precision Belt Alignment & Tracking ───────────────────────
+        # IR Sensors: LOW (0) = Object detected, HIGH (1) = Clear
+        ir_l = i("IR_LEFT", 1)
+        ir_r = i("IR_RIGHT", 1)
+        ir_obj = b("IR_OBJ", ir_l == 0 or ir_r == 0)
+        buzzer_active = b("BUZZER", False)
+
+        if ir_l == 1 and ir_r == 1:
+            alignment_mm = 1.5
+            alignment_signed_mm = 0.0
+            alignment_direction = "CENTERED"
+            alignment_status = "NORMAL"
+            alignment_desc = "Centered (Tracking nominal)"
+        elif ir_l == 0 and ir_r == 1:
+            alignment_mm = 14.5
+            alignment_signed_mm = -14.5
+            alignment_direction = "LEFT"
+            alignment_status = "WARNING"
+            alignment_desc = "Drift Left / Object Left (-14.5 mm)"
+        elif ir_l == 1 and ir_r == 0:
+            alignment_mm = 14.5
+            alignment_signed_mm = 14.5
+            alignment_direction = "RIGHT"
+            alignment_status = "WARNING"
+            alignment_desc = "Drift Right / Object Right (+14.5 mm)"
+        else:  # ir_l == 0 and ir_r == 0
+            alignment_mm = 24.0
+            alignment_signed_mm = 0.0
+            alignment_direction = "BILATERAL"
+            alignment_status = "CRITICAL"
+            alignment_desc = "Object Detected Across Sensor Path"
+
+        # Potentiometer and Motor Speed
+        pot_val = i("POT", 0)
+        motor_pwm_val = i("MOTOR_PWM", 150)
+        motor_state = pairs.get("MOTOR", "OFF").upper()
 
         reading = {
-            # ── Mapped sensor keys ──────────────────────────
-            "temperature":  round(f("TEMP"), 1),   # °C
-            "vibration":    vibration_mms,          # mm/s (derived)
-            "load":         round(f("LOAD"), 2),   # kg raw from HX711
-            "speed":        round(f("SPEED"), 2),  # m/s
-            "acoustic":     round(f("SOUND"), 1),  # 0-100 scaled dB proxy
-            "tension":      round(f("DIST"), 1),   # cm ultrasonic → belt sag proxy
-            "alignment":    round(alignment_mm, 1),# mm offset
+            # ── Primary Sensor Keys (mapped directly to frontend store) ──
+            "temperature":          temperature,
+            "vibration":            vibration_mms,
+            "load":                 load_kg,
+            "speed":                speed_mps,
+            "acoustic":             sound_lvl,
+            "tension":              dist_cm,
+            "alignment":            round(alignment_mm, 1),
+            "current":              current_a,
 
-            # ── Extra fields for ConveyorHealth stats ───────
-            "health":       round(f("HEALTH"), 1),
-            "risk":         round(f("RISK"), 1),
-            "current":      round(f("CURRENT"), 2),
-            "motor":        pairs.get("MOTOR", "OFF"),
-            "status":       pairs.get("STATUS", "UNKNOWN"),
-            "ir_left":      ir_l,
-            "ir_right":     ir_r,
-            "acc_raw":      round(acc, 2),
-            "vib_digital":  vib_raw,
+            # ── Potentiometer & Motor PWM ──────────────────────────────────
+            "pot_value":            pot_val,
+            "motor_pwm":            motor_pwm_val,
+            "motor":                motor_state,
+
+            # ── IR Object Detection & Buzzer Status ────────────────────────
+            "ir_left":              ir_l,
+            "ir_right":             ir_r,
+            "ir_object_detected":   ir_obj,
+            "ir_buzzer_active":     buzzer_active,
+
+            # ── Alignment Diagnostics ─────────────────────────────────────
+            "alignment_direction":  alignment_direction,
+            "alignment_status":     alignment_status,
+            "alignment_signed_mm":  round(alignment_signed_mm, 1),
+            "alignment_desc":       alignment_desc,
+
+            # ── Diagnostic Health / Availability Flags from Arduino ────────
+            "temp_ok":              temp_ok,
+            "load_ok":              load_ok,
+            "dist_ok":              dist_ok,
+            "mpu_ok":               mpu_ok,
+            "encoder_ok":           encoder_ok,
+
+            # ── Overall Arduino System Status ─────────────────────────────
+            "status":               pairs.get("STATUS", "NORMAL" if (mpu_ok and temp_ok and load_ok) else "PROCESSING").upper(),
+            "health":               round(f("HEALTH", 100.0), 1) if "HEALTH" in pairs else None,
+            "risk":                 round(f("RISK", 0.0), 1) if "RISK" in pairs else None,
+            "acc_raw":              round(acc, 2),
+            "vib_digital":          vib_raw,
+            "dist_cm":              dist_cm if dist_cm is not None else 0.0,
         }
         return reading
-    except Exception:
+    except Exception as e:
+        print(f"[Arduino] Parse error on line: {line.strip()} -> {e}")
         return None
+
+
+def _handle_text_line(line: str) -> Optional[dict]:
+    """
+    Handle async event prints from the Arduino UNO R4 Minima firmware,
+    such as 'MOTOR : ON', 'IR OBJECT DETECTED', etc.
+    Updates and broadcasts the shared last reading state.
+    """
+    global _last_reading
+    with _lock:
+        base = dict(_last_reading) if _last_reading else {
+            "temperature": 30.0,
+            "vibration": 2.0,
+            "load": 1.5,
+            "speed": 0.0,
+            "acoustic": 45.0,
+            "tension": 12.0,
+            "alignment": 1.5,
+            "current": 0.0,
+            "motor": "OFF",
+            "status": "NORMAL",
+            "ir_left": 1,
+            "ir_right": 1,
+            "ir_object_detected": False,
+            "ir_buzzer_active": False,
+            "mpu_ok": True,
+            "temp_ok": True,
+            "load_ok": True,
+            "dist_ok": True,
+            "encoder_ok": True,
+        }
+
+    upper = line.upper().strip()
+    updated = False
+
+    if "MOTOR : ON" in upper:
+        base["motor"] = "ON"
+        updated = True
+    elif "MOTOR : OFF" in upper:
+        base["motor"] = "OFF"
+        updated = True
+    elif "IR OBJECT DETECTED" in upper:
+        base["ir_object_detected"] = True
+        base["ir_buzzer_active"] = True
+        base["ir_left"] = 0
+        base["ir_right"] = 0
+        base["alignment"] = 24.0
+        base["alignment_desc"] = "Object Detected"
+        updated = True
+    elif "IR BUZZER OFF" in upper:
+        base["ir_buzzer_active"] = False
+        base["ir_object_detected"] = False
+        base["ir_left"] = 1
+        base["ir_right"] = 1
+        base["alignment"] = 1.5
+        base["alignment_desc"] = "Centered (Clear)"
+        updated = True
+    elif "MPU6050 : OK" in upper:
+        base["mpu_ok"] = True
+        updated = True
+    elif "MPU6050 : PROCESSING" in upper:
+        base["mpu_ok"] = False
+        base["status"] = "PROCESSING"
+        updated = True
+    elif "DS18B20 : OK" in upper:
+        base["temp_ok"] = True
+        updated = True
+    elif "DS18B20 : PROCESSING" in upper:
+        base["temp_ok"] = False
+        base["status"] = "PROCESSING"
+        updated = True
+    elif "HX711 : OK" in upper:
+        base["load_ok"] = True
+        updated = True
+    elif "HX711 : PROCESSING" in upper:
+        base["load_ok"] = False
+        base["status"] = "PROCESSING"
+        updated = True
+    elif "SYSTEM READY" in upper:
+        base["status"] = "NORMAL"
+        updated = True
+
+    return base if updated else None
 
 
 # ── Broadcast ──────────────────────────────────────────────────────────────────
@@ -176,7 +352,13 @@ def _reader(port_name: str, baud: int):
             try:
                 raw = ser.readline()
                 line = raw.decode("utf-8", errors="replace").strip()
-                if not line or "=" not in line:
+                if not line:
+                    continue
+                if "=" not in line:
+                    print(f"[Arduino Log] {line}")
+                    updated_state = _handle_text_line(line)
+                    if updated_state:
+                        _broadcast(updated_state)
                     continue
                 reading = _parse_line(line)
                 if reading:

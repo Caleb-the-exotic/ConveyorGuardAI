@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -18,7 +18,13 @@ export function GoogleAuthModal() {
     loginWithGoogleCredential,
     loginWithGooglePopup,
     logout,
+    isOtpPending,
+    pendingEmail,
+    verifyOtp,
+    closeAuthModal,
   } = useAuth();
+
+  const [otpCode, setOtpCode] = useState("");
 
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
@@ -122,6 +128,39 @@ export function GoogleAuthModal() {
                 Sign Out Operator
               </Button>
             </div>
+          </div>
+        ) : isOtpPending ? (
+          /* OTP Input View */
+          <div className="space-y-4 pt-3">
+            <div className="text-sm text-foreground text-center">
+              A 6-digit code has been sent to <span className="font-bold text-info">{pendingEmail}</span>.
+            </div>
+            <div className="flex justify-center">
+              <input
+                type="text"
+                maxLength={6}
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="000000"
+                className="w-32 text-center text-2xl font-mono tracking-widest bg-secondary/50 border border-border/80 rounded-md py-2 focus:outline-none focus:ring-2 focus:ring-info/50"
+              />
+            </div>
+            <Button
+              type="button"
+              onClick={() => verifyOtp(otpCode)}
+              disabled={otpCode.length !== 6}
+              className="w-full bg-info text-info-foreground hover:bg-info/90 font-bold"
+            >
+              Verify Code
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={closeAuthModal}
+              className="w-full text-xs text-muted-foreground"
+            >
+              Cancel
+            </Button>
           </div>
         ) : (
           /* Sign-In View */

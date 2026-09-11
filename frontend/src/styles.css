@@ -287,3 +287,77 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ────────────────────────────────────────────────────────────
+ * Print & PDF Export Rules
+ * ──────────────────────────────────────────────────────────── */
+@media print {
+  /* 1. Strictly hide all toast notifications, toast containers, and notification bars */
+  [data-sonner-toaster],
+  [data-sonner-toast],
+  [data-sonner-toaster] *,
+  .toaster,
+  .toast,
+  section[aria-label="Notifications"],
+  div:has(> [data-sonner-toaster]) {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+  }
+
+  /* 2. Hide interactive UI: headers, navigation bars, action buttons, popovers, and ambient glows */
+  header,
+  nav,
+  button,
+  .print-hidden,
+  .no-print,
+  [data-radix-popper-content-wrapper],
+  [aria-hidden="true"] {
+    display: none !important;
+  }
+
+  /* 3. Clean document formatting for paper and PDF export */
+  html,
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    font-size: 11pt !important;
+    line-height: 1.5 !important;
+  }
+
+  main {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .bg-panel,
+  .bg-panel-raised,
+  .bg-card,
+  .bg-secondary {
+    background: #ffffff !important;
+    color: #111827 !important;
+    border-color: #e5e7eb !important;
+    box-shadow: none !important;
+  }
+
+  .text-foreground,
+  .text-muted-foreground {
+    color: #1f2937 !important;
+  }
+
+  /* Avoid page breaks inside key cards and headings */
+  h1, h2, h3, h4 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  .prose {
+    color: #111827 !important;
+  }
+}
+

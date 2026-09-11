@@ -191,3 +191,46 @@ export function Bar({ value, condition }: { value: number; condition: Condition 
     </div>
   );
 }
+
+export function getDefectStyle(label: string) {
+  const l = label.toLowerCase();
+  if (l.includes("conveyor belt") || l === "belt" || l.includes("belt surface")) {
+    return {
+      border: "border-emerald-500 bg-emerald-500/15",
+      badge: "border-emerald-500 bg-emerald-600 text-white font-bold",
+      text: "text-emerald-400 font-bold",
+      severity: "NORMAL" as Condition,
+    };
+  }
+  if (l.includes("crack") || l.includes("tear") || l.includes("fracture") || l.includes("fissure")) {
+    return {
+      border: "border-red-500 bg-red-500/10",
+      badge: "border-red-500 bg-red-600 text-white font-bold",
+      text: "text-red-500 font-bold",
+      severity: "CRITICAL" as Condition,
+    };
+  }
+  if (l.includes("puncture") || l.includes("hole") || l.includes("gouge") || l.includes("perforation")) {
+    return {
+      border: "border-amber-500 bg-amber-500/10",
+      badge: "border-amber-500 bg-amber-500 text-black font-extrabold",
+      text: "text-amber-500 font-bold",
+      severity: "CRITICAL" as Condition,
+    };
+  }
+  if (l.includes("patch") || l.includes("wear") || l.includes("abrasion") || l.includes("damage") || l.includes("anomaly") || l.includes("joint") || l.includes("splice") || l.includes("misalignment")) {
+    return {
+      border: "border-yellow-400 bg-yellow-400/10",
+      badge: "border-yellow-400 bg-yellow-400 text-black font-extrabold",
+      text: "text-yellow-400 font-bold",
+      severity: "WARNING" as Condition,
+    };
+  }
+  return {
+    border: "border-cyan-400 bg-cyan-400/10",
+    badge: "border-cyan-400 bg-cyan-500 text-white font-bold",
+    text: "text-cyan-400 font-bold",
+    severity: "INFO" as Condition,
+  };
+}
+

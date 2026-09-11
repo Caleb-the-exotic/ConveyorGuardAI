@@ -11,9 +11,11 @@ import {
 import { toast } from "sonner";
 import type {
   Alert,
+  BeltAspect,
   Condition,
   Detection,
   Joint,
+  LiveDetection,
   MaintenanceTask,
   Mode,
   Scenario,
@@ -31,6 +33,11 @@ import {
   buildTasks,
   sensorSample,
 } from "./simulation";
+import {
+  computeAllBeltAspects,
+  type NormalizedScores,
+  type WearTrackingData,
+} from "./calculator";
 
 const MAX_POINTS = 400;
 
@@ -72,7 +79,7 @@ interface Ctx {
   highlightSensor: (key: SensorKey | null) => void;
   tasks: MaintenanceTask[];
   addTask: (task: Omit<MaintenanceTask, "id" | "simulated">) => void;
-  beltAspects: ReturnType<typeof buildBeltAspects>;
+  beltAspects: BeltAspect[];
   prediction: ReturnType<typeof buildPrediction>;
   overallCondition: Condition;
   workOrderOpen: boolean;
@@ -80,6 +87,14 @@ interface Ctx {
   // Arduino live data
   arduinoData: ArduinoReading | null;
   setArduinoData: (r: ArduinoReading | null) => void;
+  // AI Vision Live Detections
+  liveDetections: LiveDetection[];
+  setLiveDetections: (d: LiveDetection[]) => void;
+  // Calculated output engine & wear tracking
+  calculatedScores: NormalizedScores;
+  wearTracking: WearTrackingData;
+  hasAIEvaluated: boolean;
+  setHasAIEvaluated: (v: boolean) => void;
 }
 
 const ConveyorContext = createContext<Ctx | null>(null);
@@ -96,6 +111,15 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
   const [acknowledged, setAcknowledged] = useState<string[]>([]);
   const [workOrderOpen, setWorkOrderOpen] = useState(false);
   const [arduinoData, setArduinoDataState] = useState<ArduinoReading | null>(null);
+  const [liveDetections, setLiveDetectionsState] = useState<LiveDetection[]>([]);
+  const [hasAIEvaluated, setHasAIEvaluated] = useState(false);
+  const [wearTracking, setWearTracking] = useState<WearTrackingData>({
+    previousWearCondition: null,
+    currentWearCondition: null,
+    physicalWearPercentage: null,
+    lastTimestamp: null,
+    degradationRatePerHour: null,
+  });
   const phase = useRef(0);
 
   const activeScenario = mode === "SIMULATION" ? scenario : null;
@@ -123,47 +147,51 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
       );
     };
     tick();
-    const id = setInterval(tick, 1200);
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [mode, scenario]);
 
-  // ── Arduino live sensor injection ─────────────────────────────────────────
+  // Handle Arduino live sensor updates
   useEffect(() => {
-    if (mode !== "LIVE" || !arduinoData) return;
+    if (!arduinoData) return;
 
     const now = Date.now();
 
-    // Derive condition for each sensor key from Arduino values
     function deriveCondition(key: SensorKey, val: number): Condition {
       switch (key) {
         case "temperature":
           return val >= 60 ? "CRITICAL" : val >= 45 ? "WARNING" : "NORMAL";
         case "vibration":
-          return val >= 6.0 ? "CRITICAL" : val >= 3.0 ? "WARNING" : "NORMAL";
+          return val >= 7.0 ? "CRITICAL" : val >= 4.0 ? "WARNING" : "NORMAL";
         case "load":
-          return val >= 2.0 ? "CRITICAL" : val >= 1.5 ? "WARNING" : "NORMAL";
+          return val <= 10.0
+            ? (val >= 2.0 ? "CRITICAL" : val >= 1.5 ? "WARNING" : "NORMAL")
+            : (val >= 1800 ? "CRITICAL" : val >= 1550 ? "WARNING" : "NORMAL");
         case "speed":
-          // 0 speed when motor should be running = critical
-          return val === 0 ? "UNKNOWN" : val < 0.05 ? "CRITICAL" : "NORMAL";
+          return arduinoData?.motor === "ON" && val < 0.05
+            ? "CRITICAL"
+            : val < 1.8 ? "WARNING" : "NORMAL";
         case "acoustic":
           return val >= 75 ? "CRITICAL" : val >= 60 ? "WARNING" : "NORMAL";
+        case "current":
+          return val >= 4.5 ? "CRITICAL" : val >= 2.5 ? "WARNING" : "NORMAL";
         case "tension":
-          // Distance (belt sag): too low or too high = fault
           return val < 5 || val > 35 ? "CRITICAL" : val < 10 || val > 25 ? "WARNING" : "NORMAL";
         case "alignment":
-          return val >= 12 ? "CRITICAL" : val >= 5 ? "WARNING" : "NORMAL";
+          return val >= 20 ? "CRITICAL" : val >= 10 ? "WARNING" : "NORMAL";
         default:
           return "NORMAL";
       }
     }
 
-    const keyMap: Record<SensorKey, number> = {
+    const keyMap: Partial<Record<SensorKey, number | null>> = {
       temperature: arduinoData.temperature,
       vibration:   arduinoData.vibration,
       load:        arduinoData.load,
       speed:       arduinoData.speed,
       acoustic:    arduinoData.acoustic,
       tension:     arduinoData.tension,
+      current:     arduinoData.current,
       alignment:   arduinoData.alignment,
     };
 
@@ -171,6 +199,9 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
       prev.map((s) => {
         const raw = keyMap[s.key];
         if (raw === undefined) return s;
+        if (raw === null || isNaN(raw)) {
+          return { ...s, value: null, status: "UNKNOWN" as Condition };
+        }
         const value = raw;
         const status = deriveCondition(s.key, value);
         const history = [...s.history, { t: now, value }].slice(-MAX_POINTS);
@@ -184,12 +215,100 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
     setArduinoDataState(r);
   }, []);
 
+  // Map raw sensors dynamically for the calculation engine
+  const rawSensors = useMemo(() => {
+    const map: Partial<Record<SensorKey, number | null>> = {};
+    for (const s of sensors) {
+      map[s.key] = s.value;
+    }
+    return map;
+  }, [sensors]);
+
   const joints = useMemo(() => buildJoints(activeScenario), [activeScenario]);
   const detections = useMemo(() => buildDetections(activeScenario), [activeScenario]);
   const rawAlerts = useMemo(() => buildAlerts(activeScenario), [activeScenario]);
-  const beltAspects = useMemo(() => buildBeltAspects(activeScenario), [activeScenario]);
-  const prediction = useMemo(() => buildPrediction(activeScenario), [activeScenario]);
+  const rawPrediction = useMemo(() => buildPrediction(activeScenario), [activeScenario]);
   const simTasks = useMemo(() => buildTasks(activeScenario), [activeScenario]);
+
+  // Compute calculated aspects dynamically from the 7 sensors + AI inspection
+  const calculatedData = useMemo(() => {
+    const hasAnySensors = sensors.some((s) => s.value !== null && !isNaN(s.value));
+
+    // When no live or simulation data exists at all
+    if (!hasAnySensors && !activeScenario) {
+      return {
+        aspects: buildBeltAspects(null),
+        scores: { V: null, T: null, BT: null, L: null, S: null, AC: null, AL: null },
+        beltHealthScore: null,
+        physicalWearPercentage: null,
+      };
+    }
+
+    const aiDetections = liveDetections.length > 0 ? liveDetections : detections;
+    const isAIActive = hasAIEvaluated || liveDetections.length > 0 || activeScenario !== null;
+
+    return computeAllBeltAspects({
+      rawSensors,
+      hasAIEvaluated: isAIActive,
+      aiDetections,
+    });
+  }, [sensors, rawSensors, liveDetections, detections, hasAIEvaluated, activeScenario]);
+
+  const beltAspects = calculatedData.aspects;
+  const calculatedScores = calculatedData.scores;
+
+  // Track physical wear degradation over time (Section 10)
+  useEffect(() => {
+    const currentWear = calculatedData.physicalWearPercentage;
+    if (currentWear === null) return;
+
+    setWearTracking((prev) => {
+      const now = Date.now();
+      if (prev.currentWearCondition === null) {
+        return {
+          previousWearCondition: currentWear,
+          currentWearCondition: currentWear,
+          physicalWearPercentage: currentWear,
+          lastTimestamp: now,
+          degradationRatePerHour: 0.05, // Baseline continuous operational rate
+        };
+      }
+
+      const dtHours = prev.lastTimestamp ? (now - prev.lastTimestamp) / 3600000 : 0;
+      let rate = prev.degradationRatePerHour;
+      if (dtHours > 0.001) {
+        const delta = Math.abs(currentWear - (prev.previousWearCondition ?? currentWear));
+        const instantaneousRate = delta / dtHours;
+        rate = prev.degradationRatePerHour !== null
+          ? prev.degradationRatePerHour * 0.95 + instantaneousRate * 0.05
+          : instantaneousRate;
+      }
+
+      return {
+        previousWearCondition: prev.currentWearCondition,
+        currentWearCondition: currentWear,
+        physicalWearPercentage: currentWear,
+        lastTimestamp: now,
+        degradationRatePerHour: rate,
+      };
+    });
+  }, [calculatedData.physicalWearPercentage]);
+
+  // Synchronize prediction with calculated belt health when available
+  const prediction = useMemo(() => {
+    if (calculatedData.beltHealthScore !== null) {
+      const bh = calculatedData.beltHealthScore;
+      const failProb = Math.max(0, Math.min(1, Math.round((100 - bh)) / 100));
+      const riskLevel: Condition = bh >= 75 ? "NORMAL" : bh >= 40 ? "WARNING" : "CRITICAL";
+      return {
+        ...rawPrediction,
+        beltHealth: bh,
+        failureProbability: failProb,
+        riskLevel,
+      };
+    }
+    return rawPrediction;
+  }, [rawPrediction, calculatedData.beltHealthScore]);
 
   const alerts = useMemo(
     () =>
@@ -264,6 +383,10 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
     toast.info(`Simulated belt condition set to ${s}`);
   }, []);
 
+  const setLiveDetections = useCallback((d: LiveDetection[]) => {
+    setLiveDetectionsState(d);
+  }, []);
+
   const value: Ctx = {
     mode,
     scenario,
@@ -293,6 +416,12 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
     setWorkOrderOpen,
     arduinoData,
     setArduinoData,
+    liveDetections,
+    setLiveDetections,
+    calculatedScores,
+    wearTracking,
+    hasAIEvaluated,
+    setHasAIEvaluated,
   };
 
   return <ConveyorContext.Provider value={value}>{children}</ConveyorContext.Provider>;

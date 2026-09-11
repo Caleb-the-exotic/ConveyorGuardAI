@@ -1,114 +1,15 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useConveyor } from "@/lib/conveyor/store";
 import type { Alert, MaintenanceTask, Sensor } from "@/lib/conveyor/types";
-import { Metric, Panel, StatusBadge } from "./primitives";
+import { Metric, Panel, StatusBadge, getDefectStyle } from "./primitives";
 import { ArduinoPanel } from "./ArduinoPanel";
-
-function generateReport(data: {
-  riskLevel: string;
-  beltHealth: number | null;
-  jointHealth: number | null;
-  failureProbability: number | null;
-  status: string;
-  sensors: Sensor[];
-  alerts: Alert[];
-  tasks: MaintenanceTask[];
-  mode: string;
-  scenario: string | null;
-  arduinoHealth?: number | null;
-  arduinoRisk?: number | null;
-}): string {
-  const now = new Date();
-  const ts = now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-
-  const line = (char = "-", len = 60) => char.repeat(len);
-
-  const pct = (v: number | null) => (v === null ? "N/A" : `${v}%`);
-  const failPct =
-    data.failureProbability === null
-      ? "N/A"
-      : `${Math.round(data.failureProbability * 100)}%`;
-
-  const sensorRows = data.sensors
-    .map(
-      (s) =>
-        `  ${s.name.padEnd(28)} ${(s.value !== null ? `${s.value} ${s.unit}` : "N/A").padEnd(14)} [${s.status}]`,
-    )
-    .join("\n");
-
-  const alertRows =
-    data.alerts.length === 0
-      ? "  No active alerts."
-      : data.alerts
-          .map(
-            (a) =>
-              `  [${a.severity.toUpperCase()}] ${a.title} — ${a.status}`,
-          )
-          .join("\n");
-
-  const taskRows =
-    data.tasks.length === 0
-      ? "  No maintenance tasks."
-      : data.tasks
-          .map((t) => `  [${t.priority}] ${t.issue} — ${t.status}`)
-          .join("\n");
-
-  const arduinoSection =
-    data.arduinoHealth !== null && data.arduinoHealth !== undefined
-      ? `\n${line()}\n  ARDUINO TELEMETRY\n${line()}\n  Belt Health (Arduino) : ${data.arduinoHealth?.toFixed(1)}%\n  Failure Risk (Arduino): ${data.arduinoRisk?.toFixed(1)}%\n`
-      : "";
-
-  return `
-${line("=", 60)}
-  CONVEYORGUARD AI — BELT HEALTH ANALYSIS REPORT
-${line("=", 60)}
-  Generated   : ${ts}
-  Belt        : Iron Ore Primary Transport Line
-  Mode        : ${data.mode}${data.scenario ? ` / Scenario: ${data.scenario}` : ""}
-
-${line()}
-  HEALTH SUMMARY
-${line()}
-  Overall Belt Health   : ${pct(data.beltHealth)}
-  Joint Health          : ${pct(data.jointHealth)}
-  Failure Risk (24h)    : ${failPct}
-  Risk Level            : ${data.riskLevel}
-  Prediction Status     : ${data.status}
-${arduinoSection}
-${line()}
-  SENSOR TELEMETRY
-${line()}
-${sensorRows || "  No sensor data available."}
-
-${line()}
-  ACTIVE ALERTS
-${line()}
-${alertRows}
-
-${line()}
-  MAINTENANCE TASKS
-${line()}
-${taskRows}
-
-${line()}
-  RECOMMENDATIONS
-${line()}
-${
-  data.riskLevel === "CRITICAL"
-    ? "  ⚠ IMMEDIATE ACTION REQUIRED:\n  - Halt belt operation and perform emergency inspection.\n  - Check all joints for structural failure.\n  - Contact maintenance team immediately."
-    : data.riskLevel === "WARNING"
-      ? "  ⚠ CAUTION:\n  - Schedule inspection within 24 hours.\n  - Monitor sensor readings closely.\n  - Prepare maintenance crew on standby."
-      : data.riskLevel === "NORMAL"
-        ? "  ✓ System operating within normal parameters.\n  - Continue routine monitoring.\n  - Next scheduled inspection as per maintenance plan."
-        : "  - No live data available. Start simulation or connect live feed."
-}
-
-${line("=", 60)}
-  END OF REPORT — ConveyorGuard AI v1.0
-${line("=", 60)}
-`.trimStart();
-}
+import { AlertTriangle, CheckCircle2, ChevronDown, RefreshCw, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export function ConveyorHealth() {
+  const navigate = useNavigate();
   const {
     prediction,
     activeScenario,
@@ -118,42 +19,153 @@ export function ConveyorHealth() {
     mode,
     scenario,
     arduinoData,
+    liveDetections,
+    detections,
   } = useConveyor();
 
-  function handleStartAnalysis() {
-    const report = generateReport({
-      riskLevel: prediction.riskLevel,
-      beltHealth: prediction.beltHealth,
-      jointHealth: prediction.jointHealth,
-      failureProbability: prediction.failureProbability,
-      status: prediction.status,
-      sensors,
-      alerts,
-      tasks,
-      mode,
-      scenario: activeScenario,
-      arduinoHealth: arduinoData?.health ?? null,
-      arduinoRisk: arduinoData?.risk ?? null,
-    });
+  const hasLiveDetections = liveDetections.length > 0;
+  const anomaliesCount = hasLiveDetections ? liveDetections.length : detections.length;
 
-    const blob = new Blob([report], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const now = new Date();
-    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
-    a.href = url;
-    a.download = `conveyor_analysis_${stamp}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(true);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Auto-expand dropdown when new anomalies are detected
+  useEffect(() => {
+    if (liveDetections.length > 0) {
+      setIsDropdownOpen(true);
+    }
+  }, [liveDetections]);
+
+  async function handleStartAnalysis() {
+    setIsAnalyzing(true);
+    toast.info("Generating AI Predictive Diagnostics & Compliance Report...");
+
+    const reportAnomalies = hasLiveDetections
+      ? liveDetections.map((d) => ({
+          label: d.label,
+          confidence: d.confidence,
+          severity: getDefectStyle(d.label).severity,
+          details: `X=${Math.round(d.x)}% Y=${Math.round(d.y)}%`,
+        }))
+      : detections.map((d) => ({
+          label: d.type,
+          confidence: d.confidence,
+          severity: d.severity,
+          details: `${d.location} (Joint ${d.jointId})`,
+        }));
+
+    const sensorMap: Record<string, number | null> = {};
+    for (const s of sensors) {
+      sensorMap[s.key] = s.value;
+    }
+
+    const hasLiveSensors = hasArduino && arduinoData;
+
+    const telemetry = hasLiveSensors
+      ? {
+          is_connected: true,
+          temperature: arduinoData.temperature ?? null,
+          vibration: arduinoData.vibration ?? null,
+          load: arduinoData.load ?? null,
+          speed: arduinoData.speed ?? null,
+          acoustic: arduinoData.acoustic ?? null,
+          tension: arduinoData.tension ?? null,
+          alignment: arduinoData.alignment ?? null,
+          alignment_desc: arduinoData.alignment_desc || (arduinoData.alignment != null ? (arduinoData.alignment <= 5 ? "Centered (Tracking nominal)" : "Misaligned") : null),
+          ir_left: arduinoData.ir_left ?? null,
+          ir_right: arduinoData.ir_right ?? null,
+          motor: arduinoData.motor ?? null,
+          current: arduinoData.current ?? null,
+          health: arduinoData.health ?? null,
+          risk: arduinoData.risk ?? null,
+          status: arduinoData.status ?? null,
+        }
+      : mode === "SIMULATION"
+      ? {
+          is_connected: true,
+          mode: "SIMULATION",
+          temperature: sensorMap["temperature"] ?? null,
+          vibration: sensorMap["vibration"] ?? null,
+          load: sensorMap["load"] ?? null,
+          speed: sensorMap["speed"] ?? null,
+          acoustic: sensorMap["acoustic"] ?? null,
+          tension: sensorMap["tension"] ?? null,
+          alignment: sensorMap["alignment"] ?? null,
+          alignment_desc: (sensorMap["alignment"] ?? 0) <= 5.0 ? "Centered (Tracking nominal)" : "Drift Alert",
+          ir_left: 1,
+          ir_right: 1,
+          motor: "ON",
+          current: null,
+          health: prediction.beltHealth ?? null,
+          risk: prediction.failureProbability !== null ? Math.round(prediction.failureProbability * 100) : null,
+          status: prediction.status ?? "SIMULATED",
+        }
+      : {
+          is_connected: false,
+          temperature: null,
+          vibration: null,
+          load: null,
+          speed: null,
+          acoustic: null,
+          tension: null,
+          alignment: null,
+          alignment_desc: null,
+          ir_left: null,
+          ir_right: null,
+          motor: null,
+          current: null,
+          health: null,
+          risk: null,
+          status: "DISCONNECTED / NO INPUT DATA",
+        };
+
+    try {
+      let res: Response | null = null;
+      try {
+        res = await fetch("http://127.0.0.1:8000/api/ai/generate-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            telemetry,
+            anomalies: reportAnomalies,
+          }),
+        });
+      } catch {
+        res = await fetch("http://localhost:8000/api/ai/generate-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            telemetry,
+            anomalies: reportAnomalies,
+          }),
+        });
+      }
+
+      if (res && res.ok) {
+        const reportData = await res.json();
+        if (typeof window !== "undefined") {
+          localStorage.setItem("conveyorguard_latest_ai_report", JSON.stringify(reportData));
+        }
+        toast.success("AI Predictive Insights & Diagnostic Report generated!");
+        navigate({ to: "/ai-insights" });
+      } else {
+        toast.error("Failed to generate report from backend service.");
+      }
+    } catch (err) {
+      console.error("Analysis generation error:", err);
+      toast.error("Could not reach backend analysis server.");
+    } finally {
+      setIsAnalyzing(false);
+    }
   }
 
-  // Show Arduino-derived health when connected, otherwise fall back to simulation prediction
+  // Display AI-derived belt health and risk; Arduino provides raw sensor telemetry & status
   const hasArduino = arduinoData !== null;
-  const displayHealth     = hasArduino ? arduinoData!.health         : prediction.beltHealth;
-  const displayRisk       = hasArduino ? arduinoData!.risk           : (prediction.failureProbability !== null ? prediction.failureProbability * 100 : null);
+  const displayHealth     = prediction.beltHealth;
+  const displayRisk       = prediction.failureProbability !== null ? Math.round(prediction.failureProbability * 100) : null;
   const displayCondition  = hasArduino
-    ? (arduinoData!.risk >= 70 ? "CRITICAL" : arduinoData!.risk >= 35 ? "WARNING" : "NORMAL") as "CRITICAL" | "WARNING" | "NORMAL" | "UNKNOWN"
-    : (activeScenario ? prediction.riskLevel : "UNKNOWN");
+    ? (arduinoData.status === "NORMAL" ? "NORMAL" : "WARNING") as "CRITICAL" | "WARNING" | "NORMAL" | "UNKNOWN"
+    : (prediction.beltHealth !== null ? prediction.riskLevel : (activeScenario ? prediction.riskLevel : "UNKNOWN"));
 
   return (
     <Panel
@@ -161,9 +173,9 @@ export function ConveyorHealth() {
       title="Conveyor Health"
       subtitle={
         hasArduino
-          ? "Live — Arduino connected"
-          : activeScenario
-            ? "Simulation mode active"
+          ? `Live — Arduino UNO R4 (${arduinoData.status})`
+          : prediction.beltHealth !== null
+            ? (activeScenario ? "Simulation mode active" : "Real-time telemetry analysis")
             : "Awaiting data source"
       }
       actions={
@@ -171,8 +183,8 @@ export function ConveyorHealth() {
           condition={displayCondition}
           label={
             hasArduino
-              ? arduinoData!.status
-              : activeScenario
+              ? `Arduino ${arduinoData.status}`
+              : prediction.beltHealth !== null
                 ? `Risk ${prediction.riskLevel}`
                 : "Awaiting data"
           }
@@ -187,16 +199,16 @@ export function ConveyorHealth() {
           label="Overall Belt Health"
           value={displayHealth !== null ? Math.round(displayHealth as number) : null}
           unit="%"
-          condition={displayCondition}
-          hint={hasArduino ? "Live from Arduino" : activeScenario ? "Structural integrity index" : "Awaiting live data"}
+          condition={prediction.beltHealth !== null ? prediction.riskLevel : displayCondition}
+          hint={hasArduino ? "AI Sensor Synthesis" : prediction.beltHealth !== null ? "Structural integrity index" : "Awaiting live data"}
         />
         <Metric
           flat
           label="Failure Risk"
           value={displayRisk !== null ? Math.round(displayRisk as number) : null}
           unit="%"
-          condition={displayCondition}
-          hint={hasArduino ? "Computed on-device" : activeScenario ? "Next 24 h probability" : "Awaiting prediction"}
+          condition={prediction.beltHealth !== null ? prediction.riskLevel : displayCondition}
+          hint={hasArduino ? "AI Forecast (Next 24 h)" : activeScenario ? "Next 24 h probability" : "Awaiting prediction"}
         />
 
         {/* Arduino sensor panel */}
@@ -212,25 +224,149 @@ export function ConveyorHealth() {
       <div className="mt-6 flex justify-end border-t border-border/50 pt-4">
         <button
           id="start-analysis-btn"
+          disabled={isAnalyzing}
           onClick={handleStartAnalysis}
-          className="flex items-center gap-2 rounded-md bg-info px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white transition-all duration-200 hover:brightness-110 active:scale-95"
+          className="flex items-center gap-2 rounded-md bg-info px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white transition-all duration-200 hover:brightness-110 active:scale-95 shadow-xs cursor-pointer disabled:opacity-60"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className="size-4"
-          >
-            <path
-              fillRule="evenodd"
-              d="M10 3a.75.75 0 01.75.75v8.69l2.22-2.22a.75.75 0 111.06 1.06l-3.5 3.5a.75.75 0 01-1.06 0l-3.5-3.5a.75.75 0 111.06-1.06l2.22 2.22V3.75A.75.75 0 0110 3z"
-              clipRule="evenodd"
-            />
-            <path d="M3 13a.75.75 0 000 1.5h14a.75.75 0 000-1.5H3z" />
-          </svg>
-          Start Analysis
+          {isAnalyzing ? (
+            <>
+              <RefreshCw className="size-4 animate-spin" />
+              Generating Report...
+            </>
+          ) : (
+            <>
+              <Sparkles className="size-4" />
+              Start Analysis
+            </>
+          )}
         </button>
+      </div>
+
+      {/* Detected Conveyor Anomalies Dropdown */}
+      <div className="mt-4 overflow-hidden rounded-md border border-border/80 bg-background/80 shadow-xs">
+        {/* Dropdown Header / Trigger Button */}
+        <button
+          type="button"
+          id="detected-anomalies-dropdown-trigger"
+          onClick={() => setIsDropdownOpen((prev) => !prev)}
+          className="flex w-full items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-secondary/60 focus:outline-none cursor-pointer"
+          aria-expanded={isDropdownOpen}
+        >
+          <div className="flex items-center gap-2">
+            {anomaliesCount > 0 ? (
+              <AlertTriangle className="size-4 text-warning shrink-0 animate-pulse" />
+            ) : (
+              <CheckCircle2 className="size-4 text-normal shrink-0" />
+            )}
+            <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+              Detected Conveyor Anomalies ({anomaliesCount})
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {anomaliesCount > 0 ? (
+              <span className="rounded bg-warning/20 border border-warning/40 px-2 py-0.5 text-[0.625rem] font-bold text-warning">
+                {anomaliesCount} {anomaliesCount === 1 ? "Defect" : "Defects"}
+              </span>
+            ) : (
+              <span className="rounded bg-normal/15 border border-normal/30 px-2 py-0.5 text-[0.625rem] font-bold text-normal">
+                Nominal
+              </span>
+            )}
+            <ChevronDown
+              className={cn(
+                "size-4 text-muted-foreground transition-transform duration-200",
+                isDropdownOpen && "rotate-180"
+              )}
+            />
+          </div>
+        </button>
+
+        {/* Collapsible Dropdown Content */}
+        {isDropdownOpen && (
+          <div className="border-t border-border/60 p-2.5 space-y-2 bg-secondary/20 max-h-[320px] overflow-y-auto">
+            {hasLiveDetections ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[0.625rem] text-muted-foreground font-mono px-0.5">
+                  <span>Roboflow Defect Model</span>
+                  <span>Precision NMS Active</span>
+                </div>
+                {liveDetections.map((defect, i) => {
+                  const style = getDefectStyle(defect.label);
+                  return (
+                    <div
+                      key={i}
+                      className={cn(
+                        "flex items-center justify-between rounded border p-2 bg-card/90 transition-all hover:bg-card shadow-xs",
+                        style.border
+                      )}
+                    >
+                      <div className="flex flex-col">
+                        <span className={cn("text-xs font-bold", style.text)}>
+                          {defect.label}
+                        </span>
+                        <span className="text-[0.625rem] text-muted-foreground">
+                          Coordinates: X={Math.round(defect.x)}% Y={Math.round(defect.y)}% · W={Math.round(defect.w)}% H={Math.round(defect.h)}%
+                        </span>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className={cn("rounded px-1.5 py-0.5 text-[0.5625rem] font-bold shadow-xs", style.badge)}>
+                          {Math.round(defect.confidence * 100)}%
+                        </span>
+                        <span className="text-[0.5625rem] uppercase font-bold text-muted-foreground mt-0.5">
+                          {style.severity}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : detections.length > 0 ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[0.625rem] text-muted-foreground font-mono px-0.5">
+                  <span>Simulated Inspection</span>
+                  <span>Scenario Telemetry</span>
+                </div>
+                {detections.map((defect) => {
+                  const style = getDefectStyle(defect.type);
+                  return (
+                    <div
+                      key={defect.id}
+                      className={cn(
+                        "flex items-center justify-between rounded border p-2 bg-card/90 transition-all hover:bg-card shadow-xs",
+                        style.border
+                      )}
+                    >
+                      <div className="flex flex-col">
+                        <span className={cn("text-xs font-bold", style.text)}>
+                          {defect.type}
+                        </span>
+                        <span className="text-[0.625rem] text-muted-foreground">
+                          {defect.location} · Joint {defect.jointId} ({defect.detectedAt})
+                        </span>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className={cn("rounded px-1.5 py-0.5 text-[0.5625rem] font-bold shadow-xs", style.badge)}>
+                          {Math.round(defect.confidence * 100)}%
+                        </span>
+                        <span className="text-[0.5625rem] uppercase font-bold text-muted-foreground mt-0.5">
+                          {defect.severity}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 rounded border border-border/60 bg-card/50 p-2.5 text-xs text-muted-foreground">
+                <CheckCircle2 className="size-4 text-normal shrink-0" />
+                <span>No active anomalies detected across the conveyor surface.</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Panel>
   );
 }
+

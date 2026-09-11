@@ -25,6 +25,9 @@ interface AuthContextType {
   loginWithGoogleCredential: (jwtToken: string) => void;
   loginWithGooglePopup: () => void;
   logout: () => void;
+  isOtpPending: boolean;
+  pendingEmail?: string;
+  verifyOtp: (code: string) => Promise<void>;
 }
 
 const STORAGE_KEY = "conveyorguard_auth_user";
@@ -51,6 +54,8 @@ function parseJwt(token: string) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isOtpPending, setIsOtpPending] = useState(false);
+  const [pendingUser, setPendingUser] = useState<AuthUser | null>(null);
 
   // Load user from localStorage on mount
   useEffect(() => {
@@ -65,7 +70,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const openAuthModal = useCallback(() => setIsAuthModalOpen(true), []);
-  const closeAuthModal = useCallback(() => setIsAuthModalOpen(false), []);
+  const closeAuthModal = useCallback(() => {
+    setIsAuthModalOpen(false);
+    setIsOtpPending(false);
+    setPendingUser(null);
+  }, []);
+
+  const initiateOtpFlow = async (authUser: AuthUser) => {
+    try {
+      toast.info("Sending verification code to your email...");
+      const res = await fetch("http://localhost:3001/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authUser.email })
+      });
+      if (res.ok) {
+        setPendingUser(authUser);
+        setIsOtpPending(true);
+        toast.success("Verification code sent to your email.");
+      } else {
+        toast.error("Failed to send verification code. Please try again.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error communicating with authentication server.");
+    }
+  };
+
+  const verifyOtp = async (code: string) => {
+    if (!pendingUser) return;
+    try {
+      const res = await fetch("http://localhost:3001/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: pendingUser.email, code })
+      });
+      if (res.ok) {
+        setUser(pendingUser);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingUser));
+        setIsAuthModalOpen(false);
+        setIsOtpPending(false);
+        setPendingUser(null);
+        toast.success(`Welcome, ${pendingUser.name}! Login successful.`);
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Invalid OTP code.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error verifying code.");
+    }
+  };
 
   const loginWithGoogleCredential = useCallback((jwtToken: string) => {
     const payload = parseJwt(jwtToken);
@@ -84,10 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authProvider: "google",
     };
 
-    setUser(authUser);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
-    setIsAuthModalOpen(false);
-    toast.success(`Welcome, ${authUser.name}! Google sign-in confirmed.`);
+    initiateOtpFlow(authUser);
   }, []);
 
   const loginWithGooglePopup = useCallback(() => {
@@ -119,10 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   signedInAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
                   authProvider: "google",
                 };
-                setUser(authUser);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
-                setIsAuthModalOpen(false);
-                toast.success(`Welcome, ${authUser.name}! Signed in via Google.`);
+                initiateOtpFlow(authUser);
               }
             } catch {
               toast.error("Failed to retrieve profile from Google API.");
@@ -140,6 +189,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);
     setIsAuthModalOpen(false);
+    setIsOtpPending(false);
+    setPendingUser(null);
     toast.info("Signed out of ConveyorGuard AI.");
   }, []);
 
@@ -154,6 +205,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginWithGoogleCredential,
         loginWithGooglePopup,
         logout,
+        isOtpPending,
+        pendingEmail: pendingUser?.email,
+        verifyOtp,
       }}
     >
       {children}

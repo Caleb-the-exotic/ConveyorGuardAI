@@ -20,25 +20,49 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
 
 export interface ArduinoReading {
-  // Mapped to store sensor keys
-  temperature:  number;  // °C  (DS18B20)
-  vibration:    number;  // mm/s derived from MPU6050 + digital sensor
-  load:         number;  // kg  (HX711)
-  speed:        number;  // m/s (encoder)
-  acoustic:     number;  // 0-100 sound level (microphone)
-  tension:      number;  // cm  ultrasonic distance (belt sag proxy)
-  alignment:    number;  // mm offset (IR sensor pair derived)
+  // Mapped to store sensor keys (null if sensor disconnected/failed)
+  temperature:  number | null;  // °C (DS18B20)
+  vibration:    number | null;  // mm/s derived from MPU6050 + digital sensor
+  load:         number | null;  // kg (HX711)
+  speed:        number;         // m/s (encoder)
+  acoustic:     number;         // 0-100 sound level (microphone)
+  tension:      number | null;  // cm ultrasonic distance (HC-SR04)
+  current:      number;         // A (ACS712)
+  alignment:    number;         // mm offset (IR sensor pair derived)
 
-  // Extra telemetry
-  health:       number;
-  risk:         number;
-  current:      number;  // A (ACS712)
-  motor:        "ON" | "OFF";
+  // Potentiometer & Motor PWM Control
+  pot_value?:   number;         // 0-1023 (Pin A2)
+  motor_pwm?:   number;         // 80-255 PWM (Pin 10)
+  motor:        "ON" | "OFF";   // Push button toggled (Pin A3)
+
+  // IR Sensors & Buzzer (IR Detection Only Alert)
+  ir_left:      number;         // 1=clear, 0=object (Pin 4)
+  ir_right:     number;         // 1=clear, 0=object (Pin 5)
+  ir_object_detected?: boolean; // Object detected on either
+  ir_buzzer_active?:   boolean; // Buzzer active for 2 seconds (Pin 0)
+
+  // Alignment diagnostics
+  alignment_direction?: "CENTERED" | "LEFT" | "RIGHT" | "BILATERAL";
+  alignment_status?: "NORMAL" | "WARNING" | "CRITICAL";
+  alignment_signed_mm?: number;
+  alignment_desc?: string;
+
+  // Sensor diagnostic availability flags
+  temp_ok?: boolean;
+  load_ok?: boolean;
+  dist_ok?: boolean;
+  mpu_ok?: boolean;
+  encoder_ok?: boolean;
+
+  // Overall system status from Arduino ("NORMAL" or "PROCESSING")
   status:       string;
-  ir_left:      number;
-  ir_right:     number;
-  acc_raw:      number;
-  vib_digital:  number;
+
+  // Auxiliary / Legacy fields
+  health?:      number;
+  risk?:        number;
+  acc_raw?:     number;
+  vib_digital?: number;
+  dist_cm?:     number;
 }
 
 export interface ComPort {
