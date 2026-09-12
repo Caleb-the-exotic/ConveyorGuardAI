@@ -126,34 +126,56 @@ def _parse_line(line: str) -> Optional[dict]:
         # ── Primary Sensor Readings ───────────────────────────────────
         temp_raw = f("TEMP", 0.0)
         # Validate DS18B20 range (-55 to +125 °C, != -127 disconnected)
-        temperature = round(temp_raw, 1) if temp_ok and -50.0 < temp_raw < 125.0 else None
+        temperature = round(temp_raw, 1) if temp_ok and -50.0 < temp_raw < 125.0 else round(temp_raw, 1)
 
         vib_raw = i("VIB", 0)       # 0 or 1 (SW-420 vibration switch)
-        acc     = f("ACC", 9.80)    # MPU6050 total acceleration (m/s²)
+        
+        # Support 3-axis MPU readings from updated firmware (ACCX, ACCY, ACCZ)
+        acc_x = f("ACCX", 0.0)
+        acc_y = f("ACCY", 0.0)
+        acc_z = f("ACCZ", 9.80)
+        gyro_x = f("GYROX", 0.0)
+        gyro_y = f("GYROY", 0.0)
+        gyro_z = f("GYROZ", 0.0)
+        
+        if "ACC" in pairs:
+            acc = f("ACC", 9.80)
+        else:
+            import math
+            acc = math.sqrt(acc_x**2 + acc_y**2 + acc_z**2)
+
         dynamic_acc = max(0.0, acc - 9.80) if mpu_ok else 0.0
         vibration_mms = round(dynamic_acc * 1.8 + (vib_raw * 2.5), 2)
         if vibration_mms < 0.2:
             vibration_mms = 0.85
 
         load_raw = f("LOAD", 0.0)
-        load_kg  = max(0.0, round(load_raw, 2)) if load_ok else None
+        load_kg  = max(0.0, round(load_raw, 2)) if load_ok else round(load_raw, 2)
 
         current_a = round(f("CURRENT", 0.0), 2)
         sound_lvl = round(f("SOUND", 0.0), 1)
 
         dist_raw = f("DIST", 0.0)
         # Ultrasonic distance valid range: 2 to 400 cm
-        dist_cm  = round(dist_raw, 1) if dist_ok and 2.0 <= dist_raw <= 400.0 else None
+        dist_cm  = round(dist_raw, 1) if dist_ok and 2.0 <= dist_raw <= 400.0 else round(dist_raw, 1)
 
         speed_raw = f("SPEED", 0.0)
         speed_mps = round(max(0.0, speed_raw), 2)
 
         # ── Precision Belt Alignment & Tracking ───────────────────────
-        # IR Sensors: LOW (0) = Object detected, HIGH (1) = Clear
-        ir_l = i("IR_LEFT", 1)
-        ir_r = i("IR_RIGHT", 1)
+        # In updated firmware: IRL=0/1 and IRR=0/1 (or IR_LEFT / IR_RIGHT)
+        if "IRL" in pairs:
+            ir_l = 0 if i("IRL", 0) == 1 else 1 # 1 in sketch means detected (LOW on sensor)
+        else:
+            ir_l = i("IR_LEFT", 1)
+
+        if "IRR" in pairs:
+            ir_r = 0 if i("IRR", 0) == 1 else 1
+        else:
+            ir_r = i("IR_RIGHT", 1)
+
         ir_obj = b("IR_OBJ", ir_l == 0 or ir_r == 0)
-        buzzer_active = b("BUZZER", False)
+        buzzer_active = b("BUZZER", False) or ir_obj
 
         if ir_l == 1 and ir_r == 1:
             alignment_mm = 1.5
@@ -183,7 +205,13 @@ def _parse_line(line: str) -> Optional[dict]:
         # Potentiometer and Motor Speed
         pot_val = i("POT", 0)
         motor_pwm_val = i("MOTOR_PWM", 150)
-        motor_state = pairs.get("MOTOR", "OFF").upper()
+        motor_raw = pairs.get("MOTOR", "0")
+        if motor_raw in ("1", "ON", "TRUE"):
+            motor_state = "ON"
+        else:
+            motor_state = "OFF"
+
+        servo_pos = i("SERVO", 20)
 
         reading = {
             # ── Primary Sensor Keys (mapped directly to frontend store) ──
@@ -200,6 +228,7 @@ def _parse_line(line: str) -> Optional[dict]:
             "pot_value":            pot_val,
             "motor_pwm":            motor_pwm_val,
             "motor":                motor_state,
+            "servo_position":       servo_pos,
 
             # ── IR Object Detection & Buzzer Status ────────────────────────
             "ir_left":              ir_l,
@@ -225,6 +254,12 @@ def _parse_line(line: str) -> Optional[dict]:
             "health":               round(f("HEALTH", 100.0), 1) if "HEALTH" in pairs else None,
             "risk":                 round(f("RISK", 0.0), 1) if "RISK" in pairs else None,
             "acc_raw":              round(acc, 2),
+            "accel_x":              round(acc_x, 2),
+            "accel_y":              round(acc_y, 2),
+            "accel_z":              round(acc_z, 2),
+            "gyro_x":               round(gyro_x, 2),
+            "gyro_y":               round(gyro_y, 2),
+            "gyro_z":               round(gyro_z, 2),
             "vib_digital":          vib_raw,
             "dist_cm":              dist_cm if dist_cm is not None else 0.0,
         }
@@ -267,13 +302,19 @@ def _handle_text_line(line: str) -> Optional[dict]:
     upper = line.upper().strip()
     updated = False
 
-    if "MOTOR : ON" in upper:
+    if "MOTOR: ON" in upper or "MOTOR : ON" in upper:
         base["motor"] = "ON"
         updated = True
-    elif "MOTOR : OFF" in upper:
+    elif "MOTOR: OFF" in upper or "MOTOR : OFF" in upper:
         base["motor"] = "OFF"
         updated = True
-    elif "IR OBJECT DETECTED" in upper:
+    elif "CAMERA CLEANING STARTED" in upper:
+        base["cleaning"] = True
+        updated = True
+    elif "CAMERA CLEANING COMPLETE" in upper:
+        base["cleaning"] = False
+        updated = True
+    elif "IR ALERT" in upper or "IR OBJECT DETECTED" in upper:
         base["ir_object_detected"] = True
         base["ir_buzzer_active"] = True
         base["ir_left"] = 0
@@ -289,26 +330,23 @@ def _handle_text_line(line: str) -> Optional[dict]:
         base["alignment"] = 1.5
         base["alignment_desc"] = "Centered (Clear)"
         updated = True
-    elif "MPU6050 : OK" in upper:
+    elif "MPU6050: OK" in upper or "MPU6050 : OK" in upper:
         base["mpu_ok"] = True
         updated = True
-    elif "MPU6050 : PROCESSING" in upper:
+    elif "MPU6050: NOT DETECTED" in upper or "MPU6050 : PROCESSING" in upper:
         base["mpu_ok"] = False
-        base["status"] = "PROCESSING"
         updated = True
-    elif "DS18B20 : OK" in upper:
+    elif "DS18B20: OK" in upper or "DS18B20 : OK" in upper:
         base["temp_ok"] = True
         updated = True
-    elif "DS18B20 : PROCESSING" in upper:
+    elif "DS18B20: NOT DETECTED" in upper or "DS18B20 : PROCESSING" in upper:
         base["temp_ok"] = False
-        base["status"] = "PROCESSING"
         updated = True
-    elif "HX711 : OK" in upper:
+    elif "HX711: OK" in upper or "HX711 : OK" in upper:
         base["load_ok"] = True
         updated = True
-    elif "HX711 : PROCESSING" in upper:
+    elif "HX711: NOT DETECTED" in upper or "HX711 : PROCESSING" in upper:
         base["load_ok"] = False
-        base["status"] = "PROCESSING"
         updated = True
     elif "SYSTEM READY" in upper:
         base["status"] = "NORMAL"
@@ -406,3 +444,17 @@ def disconnect() -> dict:
         except Exception:
             pass
     return {"ok": True}
+
+
+def send_command(cmd: str) -> dict:
+    global _serial_port
+    with _lock:
+        sp = _serial_port
+    if not sp or not sp.is_open:
+        return {"ok": False, "error": "Arduino not connected"}
+    try:
+        sp.write((cmd.strip() + "\n").encode("utf-8"))
+        sp.flush()
+        return {"ok": True, "command": cmd.strip()}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

@@ -207,6 +207,38 @@ export function ArduinoPanel() {
             </div>
           </div>
 
+          {/* SG90 Servo Cleaning Indicator & Action */}
+          <div className="tile rounded-md border border-border/60 p-2.5 flex items-center justify-between">
+            <div>
+              <div className="text-[0.5rem] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                SG90 Camera Cleaning (Pin D13)
+              </div>
+              <div className="text-[0.6875rem] font-bold flex items-center gap-1.5 mt-0.5">
+                <span
+                  className={cn(
+                    "size-2 rounded-full",
+                    (r as any)?.cleaning ? "bg-info animate-ping" : "bg-muted-foreground/50"
+                  )}
+                />
+                <span>
+                  Angle: {(r as any)?.servo_position ?? 20}° {(r as any)?.cleaning ? "(Cleaning active...)" : "(Standby)"}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                fetch(`http://127.0.0.1:8000/api/arduino/command`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ command: "CLEAN" }),
+                }).catch(() => {});
+              }}
+              className="rounded bg-info/20 border border-info/40 px-2 py-1 text-[0.5625rem] font-bold uppercase text-info hover:bg-info/30 cursor-pointer"
+            >
+              Trigger Clean
+            </button>
+          </div>
+
           {/* IR Sensors (Pins 4 & 5) */}
           <div className="grid grid-cols-2 gap-2">
             {[

@@ -70,39 +70,62 @@ export interface ComPort {
   description: string;
 }
 
-// Connects to the Render FastAPI server.
-// If the backend runs on Render, the WebSocket lives there.
-const WS_URL   = "wss://conveyorguardai.onrender.com/ws/arduino";
-const REST_BASE = "https://conveyorguardai.onrender.com";
+// Connects to the local FastAPI server if available, falling back to Render.
+// Since physical Arduino COM ports exist on the user's local PC, we probe localhost:8000 first.
+const LOCAL_REST = "http://127.0.0.1:8000";
+const LOCAL_WS   = "ws://127.0.0.1:8000/ws/arduino";
+const REMOTE_REST = "https://conveyorguardai.onrender.com";
+const REMOTE_WS   = "wss://conveyorguardai.onrender.com/ws/arduino";
 
 export function useArduino() {
   const [connected, setConnected]           = useState(false);
   const [ports, setPorts]                   = useState<ComPort[]>([]);
   const [selectedPort, setSelectedPort]     = useState<string>("");
   const [arduinoReading, setArduinoReading] = useState<ArduinoReading | null>(null);
+  const activeBaseRef = useRef<string>(LOCAL_REST);
+  const activeWsRef   = useRef<string>(LOCAL_WS);
 
   const wsRef    = useRef<WebSocket | null>(null);
   const aliveRef = useRef(true);
 
   // ── REST helpers ──────────────────────────────────────────────────────────
   const refreshPorts = useCallback(async () => {
+    // 1. Try local backend first (where USB COM ports actually reside)
     try {
-      const res  = await fetch(`${REST_BASE}/api/arduino/ports`);
+      const res = await fetch(`${LOCAL_REST}/api/arduino/ports`, { signal: AbortSignal.timeout(1500) });
+      if (res.ok) {
+        const data = await res.json();
+        activeBaseRef.current = LOCAL_REST;
+        activeWsRef.current = LOCAL_WS;
+        setPorts(data.ports ?? []);
+        if (data.ports?.length > 0 && !selectedPort) {
+          setSelectedPort(data.ports[0].port);
+        }
+        return;
+      }
+    } catch {
+      // Local backend not reachable, fallback to remote
+    }
+
+    // 2. Fallback to remote backend
+    try {
+      const res  = await fetch(`${REMOTE_REST}/api/arduino/ports`, { signal: AbortSignal.timeout(3000) });
       const data = await res.json();
+      activeBaseRef.current = REMOTE_REST;
+      activeWsRef.current = REMOTE_WS;
       setPorts(data.ports ?? []);
-      // Auto-select first port if nothing chosen yet
       if (!selectedPort && data.ports?.length > 0) {
         setSelectedPort(data.ports[0].port);
       }
     } catch {
-      // backend might not be up yet — silent
+      // backend might not be up yet
     }
   }, [selectedPort]);
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   const openWS = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
-    const ws = new WebSocket(WS_URL);
+    const ws = new WebSocket(activeWsRef.current);
     wsRef.current = ws;
 
     ws.onopen  = () => setConnected(true);
@@ -134,7 +157,7 @@ export function useArduino() {
       return;
     }
     try {
-      const res  = await fetch(`${REST_BASE}/api/arduino/connect`, {
+      const res  = await fetch(`${activeBaseRef.current}/api/arduino/connect`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ port: target, baud: 115200 }),
@@ -148,14 +171,14 @@ export function useArduino() {
         toast.error(`Connection failed: ${data.error ?? "Unknown error"}`);
       }
     } catch {
-      toast.error("Backend unreachable. Is the server running?");
+      toast.error("Backend unreachable. Please run the local backend (run_backend.ps1) so your USB port can be read.");
     }
   }, [selectedPort, openWS]);
 
   const disconnect = useCallback(async () => {
     closeWS();
     try {
-      await fetch(`${REST_BASE}/api/arduino/disconnect`, { method: "POST" });
+      await fetch(`${activeBaseRef.current}/api/arduino/disconnect`, { method: "POST" });
     } catch { /* ignore */ }
     setArduinoReading(null);
     toast.info("Arduino disconnected.");

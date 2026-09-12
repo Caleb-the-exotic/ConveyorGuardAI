@@ -765,6 +765,14 @@ async def arduino_status():
     return arduino_serial.get_status()
 
 
+@app.post("/api/arduino/command")
+async def arduino_cmd(body: Dict[str, Any]):
+    cmd = body.get("command", "")
+    if not cmd:
+        return {"ok": False, "error": "command is required"}
+    return arduino_serial.send_command(cmd)
+
+
 @app.websocket("/ws/arduino")
 async def arduino_ws(websocket: WebSocket):
     """

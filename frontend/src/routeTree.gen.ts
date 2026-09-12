@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AiInsightsRouteImport } from './routes/ai-insights'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SimulationRouteImport } from './routes/simulation'
+import { Route as TermsRouteImport } from './routes/terms'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +35,25 @@ const SimulationRoute = SimulationRouteImport.update({
   path: '/simulation',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/ai-insights': typeof AiInsightsRoute
   '/privacy': typeof PrivacyRoute
   '/simulation': typeof SimulationRoute
+  '/terms': typeof TermsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/ai-insights': typeof AiInsightsRoute
   '/privacy': typeof PrivacyRoute
   '/simulation': typeof SimulationRoute
+  '/terms': typeof TermsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,14 @@ export interface FileRoutesById {
   '/ai-insights': typeof AiInsightsRoute
   '/privacy': typeof PrivacyRoute
   '/simulation': typeof SimulationRoute
+  '/terms': typeof TermsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/ai-insights' | '/privacy' | '/simulation'
+  fullPaths: '/' | '/ai-insights' | '/privacy' | '/simulation' | '/terms'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/ai-insights' | '/privacy' | '/simulation'
-  id: '__root__' | '/' | '/ai-insights' | '/privacy' | '/simulation'
+  to: '/' | '/ai-insights' | '/privacy' | '/simulation' | '/terms'
+  id: '__root__' | '/' | '/ai-insights' | '/privacy' | '/simulation' | '/terms'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +76,7 @@ export interface RootRouteChildren {
   AiInsightsRoute: typeof AiInsightsRoute
   PrivacyRoute: typeof PrivacyRoute
   SimulationRoute: typeof SimulationRoute
+  TermsRoute: typeof TermsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +109,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SimulationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +124,7 @@ const rootRouteChildren: RootRouteChildren = {
   AiInsightsRoute: AiInsightsRoute,
   PrivacyRoute: PrivacyRoute,
   SimulationRoute: SimulationRoute,
+  TermsRoute: TermsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
