@@ -634,16 +634,16 @@ export function ExecutiveDiagnosticReport() {
       </div>
 
       {/* Tab 1: Executive Report */}
-      {activeTab === "report" && (
+      <div className={cn(activeTab === "report" ? "block" : "hidden print:block print:mt-6")}>
         <div className="rounded-xl border border-border/80 bg-card p-6 shadow-md">
           <div className="prose prose-invert max-w-none text-foreground space-y-1">
             {renderMarkdownBlocks(markdownContent)}
           </div>
         </div>
-      )}
+      </div>
 
       {/* Tab 2: Telemetry & Optical Audit */}
-      {activeTab === "telemetry" && (
+      <div className={cn(activeTab === "telemetry" ? "block" : "hidden print:block print:mt-6")}>
         <div className="grid gap-4 lg:grid-cols-2">
           {/* Telemetry Snapshot Grid */}
           <div className="rounded-xl border border-border/80 bg-card p-5 space-y-4">
@@ -844,10 +844,9 @@ export function ExecutiveDiagnosticReport() {
             </div>
           </div>
         </div>
-      )}
-
+      </div>
       {/* Tab 3: Industrial Standards & Citations */}
-      {activeTab === "standards" && (
+      <div className={cn(activeTab === "standards" ? "block" : "hidden print:block print:mt-6")}>
         <div className="rounded-xl border border-border/80 bg-card p-5 space-y-4">
           <div className="flex items-center justify-between border-b border-border/60 pb-3">
             <div className="flex items-center gap-2">
@@ -905,10 +904,10 @@ export function ExecutiveDiagnosticReport() {
             </div>
           )}
         </div>
-      )}
+      </div>
 
       {/* Tab 4: Raw Neural Log */}
-      {activeTab === "raw" && (
+      <div className={cn(activeTab === "raw" ? "block" : "hidden print:block print:mt-6")}>
         <div className="rounded-xl border border-border/80 bg-background/90 p-5 space-y-3">
           <div className="flex items-center justify-between border-b border-border/60 pb-3">
             <span className="text-xs font-mono font-bold text-foreground">
@@ -926,7 +925,7 @@ export function ExecutiveDiagnosticReport() {
             {markdownContent}
           </pre>
         </div>
-      )}
+      </div>
     </div>
   );
 }
