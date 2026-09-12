@@ -1,5 +1,4 @@
 # Large model files
-*.pt
 *.pth
 *.zip
 
@@ -13,9 +12,8 @@ __pycache__/
 # Node modules
 node_modules/
 
-# Environment variables
-.env
-.env.local
+# Waste folder
+backend/waste/
 
 # IDE
 .vscode/

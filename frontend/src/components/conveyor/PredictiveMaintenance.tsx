@@ -4,8 +4,18 @@ import { cn } from "@/lib/utils";
 import { Bar, Metric, Panel, StatusBadge, conditionClasses } from "./primitives";
 
 export function PredictiveMaintenance() {
-  const { prediction, activeScenario, selectedJoint } = useConveyor();
+  const { prediction, activeScenario, selectedJoint, liveDetections, overallCondition, mode } = useConveyor();
   const cond = activeScenario ? prediction.riskLevel : "UNKNOWN";
+
+  const failRisk = prediction.failureProbability !== null ? Math.round(prediction.failureProbability * 100) : null;
+  let riskLabel = "Awaiting Data";
+  if (failRisk !== null) {
+    if (failRisk <= 20) riskLabel = "Very Low";
+    else if (failRisk <= 40) riskLabel = "Low";
+    else if (failRisk <= 60) riskLabel = "Moderate";
+    else if (failRisk <= 80) riskLabel = "High";
+    else riskLabel = "Critical";
+  }
 
   return (
     <Panel
@@ -21,44 +31,44 @@ export function PredictiveMaintenance() {
         />
       }
     >
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-x-8 gap-y-6 lg:grid-cols-4 lg:divide-x lg:divide-border/60 lg:[&>div:first-child]:pl-0 lg:[&>div:last-child]:pr-0 lg:[&>div]:px-8">
-          <Metric
-            flat
-            label="Belt Health"
-            value={prediction.beltHealth}
-            unit="%"
-            condition={cond}
-            hint={activeScenario ? "Whole-belt integrity" : "Awaiting live data"}
-          />
-          <Metric
-            flat
-            label="Joint Health"
-            value={prediction.jointHealth}
-            unit="%"
-            condition={cond}
-            hint={activeScenario ? "Weakest splice" : "Awaiting live data"}
-          />
-          <Metric
-            flat
-            label="Failure Probability"
-            value={
-              prediction.failureProbability === null
-                ? null
-                : Math.round(prediction.failureProbability * 100)
-            }
-            unit="%"
-            condition={cond}
-            hint={activeScenario ? "Next 24 h" : "Awaiting prediction"}
-          />
-          <Metric
-            flat
-            label="Remaining Useful Life"
-            value={prediction.rulHours}
-            unit="h"
-            condition={cond}
-            hint={activeScenario ? "Before intervention" : "Awaiting prediction"}
-          />
+      <div className="space-y-6">
+        {/* AI Summary & Maintenance KPIs */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="tile rounded-md p-4">
+            <div className="label-caps">Estimated Failure Risk Score</div>
+            <div className="tabular mt-2 text-2xl font-extrabold text-foreground">
+              {failRisk !== null ? `${failRisk} / 100` : "Awaiting Data"}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">{riskLabel}</div>
+          </div>
+
+          <div className="tile rounded-md p-4">
+            <div className="label-caps">Est. Remaining Life (RUL)</div>
+            <div className="tabular mt-2 text-2xl font-extrabold text-foreground">
+              {prediction.rulHours !== null ? `${prediction.rulHours} hrs` : "Awaiting Data"}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">Based on current belt tension & wear</div>
+          </div>
+
+          <div className="tile rounded-md p-4">
+            <div className="label-caps">Vision Detections</div>
+            <div className="tabular mt-2 text-2xl font-extrabold text-foreground">
+              {liveDetections.length} Flagged
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {liveDetections.filter((d) => d.severity === "CRITICAL").length} critical defects
+            </div>
+          </div>
+
+          <div className="tile rounded-md p-4">
+            <div className="label-caps">Overall AI Health Assessment</div>
+            <div className="mt-2 flex items-center gap-2">
+              <StatusBadge condition={overallCondition} />
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {mode === "SIMULATION" ? "Simulated Scenario Active" : "Operational Telemetry"}
+            </div>
+          </div>
         </div>
 
         {prediction.beltHealth !== null ? (
@@ -74,18 +84,6 @@ export function PredictiveMaintenance() {
           </div>
         ) : null}
 
-        <div className="flex items-start gap-2 border-t border-border/60 pt-4">
-          <Brain className={cn("mt-0.5 size-4 shrink-0", conditionClasses(cond).text)} aria-hidden />
-          <div className="min-w-0">
-            <div className="label-caps">Model Status</div>
-            <p className="text-xs leading-relaxed text-foreground">{prediction.status}</p>
-            {selectedJoint ? (
-              <p className="mt-1 text-[0.6875rem] text-muted-foreground">
-                Focused joint: {selectedJoint.label} · risk {selectedJoint.riskLevel}
-              </p>
-            ) : null}
-          </div>
-        </div>
       </div>
     </Panel>
   );

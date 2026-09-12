@@ -1,0 +1,14 @@
+path: C:/Users/Aarthy/Desktop/project-refine-main/backend/yolo-dataset-center
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 1
+names: ['conveyor']
+
+roboflow:
+  workspace: frederico-sousa
+  project: conveyor-w5cmz
+  version: 1
+  license: Private
+  url: https://app.roboflow.com/frederico-sousa/conveyor-w5cmz/1

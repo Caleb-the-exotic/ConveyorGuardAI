@@ -1,11 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { BrainCircuit, Sparkles, Activity, ShieldCheck, Cpu, ArrowRight } from "lucide-react";
+import { BrainCircuit, Sparkles, Activity, ShieldCheck, Cpu, ArrowRight, ClipboardList } from "lucide-react";
 import { useConveyor } from "@/lib/conveyor/store";
-import { AIDetectionDetails } from "@/components/conveyor/AIDetectionDetails";
 import { PredictiveMaintenance } from "@/components/conveyor/PredictiveMaintenance";
-import { CurrentDegradation } from "@/components/conveyor/CurrentDegradation";
-import { AIExplanation } from "@/components/conveyor/AIExplanation";
-import { AIRecommendation } from "@/components/conveyor/AIRecommendation";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/conveyor/primitives";
 import { ExecutiveDiagnosticReport } from "@/components/conveyor/ExecutiveDiagnosticReport";
 
@@ -27,7 +24,7 @@ export const Route = createFileRoute("/ai-insights")({
 });
 
 function AIInsightsPage() {
-  const { prediction, detections, overallCondition, mode } = useConveyor();
+  const { prediction, detections, overallCondition, mode, setWorkOrderOpen } = useConveyor();
 
   return (
     <main className="mx-auto w-full max-w-[1800px] space-y-6 px-3 py-4 sm:px-6 sm:py-6">
@@ -93,61 +90,22 @@ function AIInsightsPage() {
       {/* Live Executive AI Diagnostic & Compliance Report */}
       <ExecutiveDiagnosticReport />
 
-      {/* Top AI Summary KPIs */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="tile rounded-md p-4">
-          <div className="label-caps">Rupture Probability</div>
-          <div className="tabular mt-2 text-2xl font-extrabold text-foreground">
-            {prediction.failureProbability !== null
-              ? `${prediction.failureProbability}%`
-              : "0.5%"}
-          </div>
-          <div className="mt-1 text-xs text-muted-foreground">24-hour forecast window</div>
-        </div>
 
-        <div className="tile rounded-md p-4">
-          <div className="label-caps">Est. Remaining Life (RUL)</div>
-          <div className="tabular mt-2 text-2xl font-extrabold text-foreground">
-            {prediction.rulHours !== null ? `${prediction.rulHours} hrs` : "4,200+ hrs"}
-          </div>
-          <div className="mt-1 text-xs text-muted-foreground">Based on current belt tension & wear</div>
-        </div>
-
-        <div className="tile rounded-md p-4">
-          <div className="label-caps">Vision Detections</div>
-          <div className="tabular mt-2 text-2xl font-extrabold text-foreground">
-            {detections.length} Flagged
-          </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {detections.filter((d) => d.severity === "CRITICAL").length} critical defects
-          </div>
-        </div>
-
-        <div className="tile rounded-md p-4">
-          <div className="label-caps">Overall AI Health Assessment</div>
-          <div className="mt-2 flex items-center gap-2">
-            <StatusBadge condition={overallCondition} />
-          </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {mode === "SIMULATION" ? "Simulated Scenario Active" : "Operational Telemetry"}
-          </div>
-        </div>
-      </div>
-
-      {/* AI Vision Detection Details */}
-      <AIDetectionDetails />
 
       {/* Predictive Maintenance & RUL Breakdown */}
       <PredictiveMaintenance />
 
-      {/* Current vs Predicted Degradation Curve & AI Model Reasoning */}
-      <div className="grid gap-4 xl:grid-cols-2">
-        <CurrentDegradation />
-        <AIExplanation />
+      {/* Action Recommendation */}
+      <div className="flex justify-end pt-2">
+        <Button
+          type="button"
+          onClick={() => setWorkOrderOpen(true)}
+          className="min-h-11 w-full sm:w-auto text-[0.6875rem] font-bold tracking-[0.14em] uppercase"
+        >
+          <ClipboardList className="size-4 mr-2" aria-hidden />
+          Create Maintenance Work Order
+        </Button>
       </div>
-
-      {/* AI Action Recommendations */}
-      <AIRecommendation />
     </main>
   );
 }

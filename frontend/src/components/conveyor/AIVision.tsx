@@ -49,58 +49,10 @@ const AVAILABLE_MODELS: ModelOption[] = [
     desc: "Crack & Tear Detector",
   },
   {
-    id: "best_pt",
-    name: "best.pt",
-    filename: "best.pt",
-    desc: "YOLOv8 Optimal Weights",
-  },
-  {
-    id: "best_stage1",
-    name: "best_stage1.pt",
-    filename: "best_stage1.pt",
-    desc: "Two-Stage Detector (Stage 1)",
-  },
-  {
-    id: "best_stage2",
-    name: "best_stage2.pt",
-    filename: "best_stage2.pt",
-    desc: "Two-Stage Detector (Stage 2)",
-  },
-  {
-    id: "model_pt",
-    name: "model.pt",
-    filename: "model.pt",
-    desc: "ConveyCheck Defect Model",
-  },
-  {
-    id: "yolov8n",
-    name: "yolov8n.pt",
-    filename: "yolov8n.pt",
-    desc: "YOLOv8 Nano Backbone",
-  },
-  {
-    id: "best_2",
-    name: "best (2).pt",
-    filename: "best (2).pt",
-    desc: "New Best Weights",
-  },
-  {
-    id: "epoch0",
-    name: "epoch0.pt",
-    filename: "epoch0.pt",
-    desc: "Initial Epoch Weights",
-  },
-  {
     id: "human",
     name: "human.pt",
     filename: "human.pt",
     desc: "Human & General Detector",
-  },
-  {
-    id: "last_2",
-    name: "last (2).pt",
-    filename: "last (2).pt",
-    desc: "Latest Training Weights",
   },
 ];
 
@@ -124,6 +76,7 @@ export function AIVision() {
     liveDetections,
     setLiveDetections,
     setHasAIEvaluated,
+    setLastSnapshot,
   } = useConveyor();
 
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -444,6 +397,7 @@ export function AIVision() {
       const dataUrl = ev.target?.result as string;
       if (dataUrl) {
         setUploadedImage(dataUrl);
+        setLastSnapshot(dataUrl);
         analyzeImageDirectly(dataUrl, selectedModelRef.current);
       }
     };
@@ -541,6 +495,7 @@ export function AIVision() {
             if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
               isSendingFrameRef.current = true;
               const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+              setLastSnapshot(dataUrl);
               wsRef.current.send(
                 JSON.stringify({
                   image: dataUrl,

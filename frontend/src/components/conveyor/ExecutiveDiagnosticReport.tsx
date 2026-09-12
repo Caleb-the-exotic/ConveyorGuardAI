@@ -63,7 +63,9 @@ export function ExecutiveDiagnosticReport() {
     hasLiveDetections,
     arduinoData,
     hasArduino,
+    activeScenario,
     mode,
+    lastSnapshot,
   } = useConveyor();
 
   const [reportData, setReportData] = useState<AIReportData | null>(null);
@@ -138,9 +140,9 @@ export function ExecutiveDiagnosticReport() {
           ir_right: arduinoData.ir_right ?? null,
           motor: arduinoData.motor ?? null,
           current: arduinoData.current ?? null,
-          health: arduinoData.health ?? null,
-          risk: arduinoData.risk ?? null,
-          status: arduinoData.status ?? null,
+          health: prediction.beltHealth ?? null,
+          risk: prediction.failureProbability !== null ? Math.round(prediction.failureProbability * 100) : null,
+          status: prediction.status ?? null,
         }
       : mode === "SIMULATION"
       ? {
@@ -185,14 +187,14 @@ export function ExecutiveDiagnosticReport() {
       let res = await fetch("http://127.0.0.1:8000/api/ai/generate-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telemetry, anomalies: reportAnomalies }),
+        body: JSON.stringify({ telemetry, anomalies: reportAnomalies, image_base64: lastSnapshot }),
       }).catch(() => null);
 
       if (!res || !res.ok) {
         res = await fetch("http://localhost:8000/api/ai/generate-report", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ telemetry, anomalies: reportAnomalies }),
+          body: JSON.stringify({ telemetry, anomalies: reportAnomalies, image_base64: lastSnapshot }),
         }).catch(() => null);
       }
 
@@ -819,6 +821,14 @@ export function ExecutiveDiagnosticReport() {
                   {ocrText && !ocrText.toLowerCase().includes("no camera") ? "STATUS: OK" : "STATUS: AWAITING STREAM"}
                 </span>
               </div>
+              
+              {/* Captured Snapshot Display */}
+              {lastSnapshot && (
+                <div className="mt-2 mb-3">
+                  <img src={lastSnapshot} alt="Optical Defect Verification Snapshot" className="w-full max-h-[300px] object-cover rounded border border-border/50 shadow-sm" />
+                </div>
+              )}
+
               <pre className="whitespace-pre-wrap text-xs text-foreground/80 leading-relaxed font-mono">
                 {ocrText || "No camera snapshot provided for optical text analysis. Physical sensor readings are prioritized."}
               </pre>

@@ -1,0 +1,16 @@
+{
+  "dataset": "yolo-dataset-center",
+  "base_model": "yolov8n.pt",
+  "epochs": 3,
+  "imgsz": 320,
+  "batch_size": 32,
+  "duration_seconds": 1089.1,
+  "best_weights": "C:\\Users\\Aarthy\\Desktop\\project-refine-main\\backend\\yolo-dataset-center\\best.pt",
+  "metrics": {
+    "mAP50": 0.995,
+    "mAP50-95": 0.9593282296650717,
+    "precision": 0.9994125841251816,
+    "recall": 1.0
+  },
+  "timestamp": "2026-09-11 10:14:53"
+}

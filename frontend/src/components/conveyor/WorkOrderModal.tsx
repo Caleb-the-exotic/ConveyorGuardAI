@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useAuth } from "@/lib/authContext";
 import { useConveyor } from "@/lib/conveyor/store";
 import {
   Dialog,
@@ -44,7 +45,10 @@ export function WorkOrderModal() {
     activeDetectionId,
     prediction,
     addTask,
+    addAlert,
   } = useConveyor();
+
+  const { user } = useAuth();
 
   const activeDetection = useMemo(
     () => detections.find((d) => d.id === activeDetectionId) ?? null,
@@ -103,7 +107,7 @@ export function WorkOrderModal() {
       hour: "2-digit",
       minute: "2-digit",
     });
-    addTask({
+    const taskData = {
       jointId,
       issue: issue.trim(),
       priority,
@@ -111,7 +115,32 @@ export function WorkOrderModal() {
       scheduledAt: when,
       status,
       ...(notes.trim() ? { notes: notes.trim() } : {}),
-    });
+    };
+
+    addTask(taskData);
+    
+    // 1. Add notification to Header
+    const now = new Date();
+    addAlert({
+      severity: priority === "CRITICAL" ? "CRITICAL" : priority === "HIGH" ? "WARNING" : "NORMAL",
+      title: `Work Order Dispatched: ${jointId}`,
+      section: "MAINTENANCE",
+      jointId,
+      sensorKey: null,
+      detectionId: activeDetectionId,
+      condition: `${issue} (Priority: ${priority})`,
+      status: "ACTIVE",
+    } as any); // cast as any because addAlert signature might be missing timestamp string format wait store.tsx handles timestamp string differently, but wait, addAlert expects timestamp as number? No, string!
+
+    // 2. Send Email if user is logged in
+    if (user?.email) {
+      fetch("http://localhost:3001/api/alerts/work-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email, workOrder: taskData }),
+      }).catch(err => console.error("Failed to send work order email:", err));
+    }
+
     setWorkOrderOpen(false);
     toast.success("Maintenance work order created", {
       description: `${jointId} · ${priority} · ${technician.trim()} — ${when}`,

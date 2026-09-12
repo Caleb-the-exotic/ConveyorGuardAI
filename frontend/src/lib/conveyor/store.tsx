@@ -75,6 +75,7 @@ interface Ctx {
   activeAlertId: string | null;
   focusAlert: (alert: Alert) => void;
   acknowledgeAlert: (id: string) => void;
+  addAlert: (alert: Omit<Alert, "id" | "timestamp">) => void;
   highlightedSensor: SensorKey | null;
   highlightSensor: (key: SensorKey | null) => void;
   tasks: MaintenanceTask[];
@@ -92,9 +93,10 @@ interface Ctx {
   setLiveDetections: (d: LiveDetection[]) => void;
   // Calculated output engine & wear tracking
   calculatedScores: NormalizedScores;
-  wearTracking: WearTrackingData;
   hasAIEvaluated: boolean;
   setHasAIEvaluated: (v: boolean) => void;
+  lastSnapshot: string | null;
+  setLastSnapshot: (v: string | null) => void;
 }
 
 const ConveyorContext = createContext<Ctx | null>(null);
@@ -108,11 +110,13 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
   const [activeAlertId, setActiveAlertId] = useState<string | null>(null);
   const [highlightedSensor, setHighlightedSensor] = useState<SensorKey | null>(null);
   const [extraTasks, setExtraTasks] = useState<MaintenanceTask[]>([]);
+  const [extraAlerts, setExtraAlerts] = useState<Alert[]>([]);
   const [acknowledged, setAcknowledged] = useState<string[]>([]);
   const [workOrderOpen, setWorkOrderOpen] = useState(false);
   const [arduinoData, setArduinoDataState] = useState<ArduinoReading | null>(null);
   const [liveDetections, setLiveDetectionsState] = useState<LiveDetection[]>([]);
   const [hasAIEvaluated, setHasAIEvaluated] = useState(false);
+  const [lastSnapshot, setLastSnapshot] = useState<string | null>(null);
   const [wearTracking, setWearTracking] = useState<WearTrackingData>({
     previousWearCondition: null,
     currentWearCondition: null,
@@ -297,8 +301,24 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
   // Synchronize prediction with calculated belt health when available
   const prediction = useMemo(() => {
     if (calculatedData.beltHealthScore !== null) {
-      const bh = calculatedData.beltHealthScore;
-      const failProb = Math.max(0, Math.min(1, Math.round((100 - bh)) / 100));
+      const getAspect = (k: string) => calculatedData.aspects.find(a => a.key === k)?.score ?? 100;
+      const bh = getAspect("health");
+      const bw = getAspect("wear");
+      const ec = getAspect("edge");
+      const sc = getAspect("surface");
+      const sp = getAspect("splice");
+
+      let failRisk =
+        0.25 * (100 - bh) +
+        0.20 * (100 - bw) +
+        0.15 * (100 - ec) +
+        0.15 * (100 - sc) +
+        0.25 * (100 - sp);
+      
+      failRisk = Math.max(0, Math.min(100, Math.round(failRisk)));
+
+      const failProb = failRisk / 100;
+
       const riskLevel: Condition = bh >= 75 ? "NORMAL" : bh >= 40 ? "WARNING" : "CRITICAL";
       return {
         ...rawPrediction,
@@ -308,14 +328,14 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
       };
     }
     return rawPrediction;
-  }, [rawPrediction, calculatedData.beltHealthScore]);
+  }, [rawPrediction, calculatedData.beltHealthScore, calculatedData.aspects]);
 
   const alerts = useMemo(
-    () =>
-      rawAlerts.map((a) =>
-        acknowledged.includes(a.id) ? { ...a, status: "ACKNOWLEDGED" as const } : a,
-      ),
-    [rawAlerts, acknowledged],
+    () => [
+      ...extraAlerts.map((a) => (acknowledged.includes(a.id) ? { ...a, status: "ACKNOWLEDGED" as const } : a)),
+      ...rawAlerts.map((a) => (acknowledged.includes(a.id) ? { ...a, status: "ACKNOWLEDGED" as const } : a)),
+    ],
+    [extraAlerts, rawAlerts, acknowledged],
   );
 
   const tasks = useMemo(() => [...extraTasks, ...simTasks], [extraTasks, simTasks]);
@@ -357,8 +377,17 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const acknowledgeAlert = useCallback((id: string) => {
-    setAcknowledged((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setAcknowledged((prev) => [...prev, id]);
     toast.success("Alert acknowledged");
+  }, []);
+
+  const addAlert = useCallback((alertData: Omit<Alert, "id" | "timestamp">) => {
+    const newAlert: Alert = {
+      ...alertData,
+      id: `alert-${Date.now()}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    };
+    setExtraAlerts((prev) => [newAlert, ...prev]);
   }, []);
 
   const highlightSensor = useCallback((key: SensorKey | null) => {
@@ -405,6 +434,7 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
     activeAlertId,
     focusAlert,
     acknowledgeAlert,
+    addAlert,
     highlightedSensor,
     highlightSensor,
     tasks,
@@ -422,6 +452,8 @@ export function ConveyorProvider({ children }: { children: ReactNode }) {
     wearTracking,
     hasAIEvaluated,
     setHasAIEvaluated,
+    lastSnapshot,
+    setLastSnapshot,
   };
 
   return <ConveyorContext.Provider value={value}>{children}</ConveyorContext.Provider>;
