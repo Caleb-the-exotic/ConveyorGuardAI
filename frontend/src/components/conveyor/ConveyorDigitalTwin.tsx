@@ -228,37 +228,7 @@ export function ConveyorDigitalTwin({
         const markersGroup = new THREE.Group();
         markersGroupRef.current = markersGroup;
 
-        SPLICE_LOCATIONS.forEach((splice) => {
-          const markerMesh = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.7, 0.7, 0.2, 16),
-            new THREE.MeshStandardMaterial({
-              color: "#38bdf8",
-              emissive: "#38bdf8",
-              emissiveIntensity: 0.6,
-              transparent: true,
-              opacity: 0.85,
-              roughness: 0.2,
-            })
-          );
-          // Position along top belt surface
-          markerMesh.position.set(0, 1.2, splice.zCoord);
-          markerMesh.name = `marker_${splice.id}`;
-          markersGroup.add(markerMesh);
-
-          // Outer glowing ring
-          const ringGeo = new THREE.RingGeometry(0.9, 1.2, 24);
-          const ringMat = new THREE.MeshBasicMaterial({
-            color: "#38bdf8",
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.4,
-          });
-          const ringMesh = new THREE.Mesh(ringGeo, ringMat);
-          ringMesh.rotation.x = Math.PI / 2;
-          ringMesh.position.set(0, 1.25, splice.zCoord);
-          ringMesh.name = `ring_${splice.id}`;
-          markersGroup.add(ringMesh);
-        });
+        // Splices and circles removed per user request
 
         scene.add(markersGroup);
 
@@ -704,44 +674,6 @@ export function ConveyorDigitalTwin({
           </div>
         </div>
 
-        {/* Floating Splice Joint Selector (Right) */}
-        <div className="pointer-events-auto absolute top-3 right-3 flex flex-col gap-1 z-10">
-          <div className="rounded-md border border-border/80 bg-background/85 p-2 backdrop-blur shadow-sm text-right">
-            <span className="block text-[0.5625rem] font-extrabold uppercase tracking-widest text-muted-foreground mb-1.5">
-              Inspect Splices
-            </span>
-            <div className="flex flex-col gap-1">
-              {SPLICE_LOCATIONS.map((splice) => {
-                const isWarningJoint = scenario === "WARNING" && splice.id === "J2";
-                const isCriticalJoint = scenario === "CRITICAL" && splice.id === "J3";
-                const isSelected = selectedJointId === splice.id;
-
-                return (
-                  <button
-                    key={splice.id}
-                    type="button"
-                    onClick={() => focusSplice(splice.id)}
-                    onMouseEnter={() => setActiveJointHover(splice.id)}
-                    onMouseLeave={() => setActiveJointHover(null)}
-                    className={cn(
-                      "flex items-center justify-between gap-2 rounded px-2 py-1 text-[0.625rem] font-bold uppercase tracking-wider transition-all",
-                      isCriticalJoint
-                        ? "bg-critical/20 text-critical border border-critical/50 animate-pulse"
-                        : isWarningJoint
-                          ? "bg-warning/20 text-warning border border-warning/50"
-                          : isSelected
-                            ? "bg-info/20 text-info border border-info/50"
-                            : "bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    )}
-                  >
-                    <span>{splice.label}</span>
-                    <span className="size-1.5 rounded-full bg-current" />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
 
         {/* Bottom Interactive HUD Bar */}
         <div className="pointer-events-none absolute inset-x-3 bottom-3 z-10">
