@@ -444,32 +444,6 @@ function SimulationPage() {
             </div>
           </div>
 
-          {/* Splice Joints Simulated State */}
-          <div className="space-y-2 border-t border-border/50 pt-3">
-            <h3 className="text-xs font-bold tracking-wider text-foreground uppercase">
-              Splice Joint Structural Matrix (5 Splices)
-            </h3>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-              {joints.map((joint) => (
-                <div
-                  key={joint.id}
-                  className="rounded-md border border-border bg-secondary/30 p-2.5 text-center"
-                >
-                  <div className="flex items-center justify-center gap-1.5">
-                    <StatusDot condition={joint.condition} />
-                    <span className="text-xs font-bold text-foreground">{joint.label}</span>
-                  </div>
-                  <div className="tabular mt-1 text-base font-extrabold text-foreground">
-                    {joint.healthScore !== null ? `${joint.healthScore}%` : "—"}
-                  </div>
-                  <div className="mt-0.5 text-[0.625rem] text-muted-foreground">
-                    {joint.rulHours !== null ? `${joint.rulHours}h RUL` : "Nominal RUL"}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
           {/* 3D Conveyor Digital Twin CAD Assembly Viewer */}
           <div className="space-y-2 border-t border-border/50 pt-3">
             <ConveyorDigitalTwin
