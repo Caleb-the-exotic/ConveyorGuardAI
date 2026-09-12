@@ -396,25 +396,24 @@ void setup()
   // ----------------------------------------------------------
 
   Wire.begin();
+  #if defined(ARDUINO_UNOR4_MINIMA) || defined(ARDUINO_UNOR4_WIFI) || defined(WIRE_HAS_TIMEOUT)
+  Wire.setWireTimeout(25000 /* us */, true /* reset_on_timeout */);
+  #endif
 
 
   // ----------------------------------------------------------
-  // LCD
+  // LCD (Safe Init)
   // ----------------------------------------------------------
 
+  Serial.println("Initializing LCD...");
   lcd.init();
-
   lcd.backlight();
-
   lcd.clear();
-
   lcd.setCursor(0, 0);
-
   lcd.print("CONVEYOR");
-
   lcd.setCursor(0, 1);
-
   lcd.print("MONITORING");
+  Serial.println("LCD: Initialized");
 
 
   // ----------------------------------------------------------
