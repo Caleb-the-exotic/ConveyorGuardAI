@@ -21,6 +21,7 @@ export function ConveyorHealth() {
     arduinoData,
     liveDetections,
     detections,
+    lastSnapshot,
   } = useConveyor();
 
   const hasLiveDetections = liveDetections.length > 0;
@@ -128,6 +129,7 @@ export function ConveyorHealth() {
           body: JSON.stringify({
             telemetry,
             anomalies: reportAnomalies,
+            image_base64: lastSnapshot,
           }),
         });
       } catch {
@@ -137,6 +139,7 @@ export function ConveyorHealth() {
           body: JSON.stringify({
             telemetry,
             anomalies: reportAnomalies,
+            image_base64: lastSnapshot,
           }),
         });
       }
