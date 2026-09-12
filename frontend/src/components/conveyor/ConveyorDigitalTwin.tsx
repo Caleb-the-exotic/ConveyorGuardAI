@@ -82,8 +82,8 @@ export function ConveyorDigitalTwin({
     // Scene
     const scene = new THREE.Scene();
     sceneRef.current = scene;
-    scene.background = new THREE.Color("#090d13");
-    scene.fog = new THREE.FogExp2("#090d13", 0.008);
+    scene.background = new THREE.Color("#ffffff");
+    scene.fog = new THREE.FogExp2("#ffffff", 0.008);
 
     // Camera
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.5, 500);
@@ -675,50 +675,7 @@ export function ConveyorDigitalTwin({
         </div>
 
 
-        {/* Bottom Interactive HUD Bar */}
-        <div className="pointer-events-none absolute inset-x-3 bottom-3 z-10">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/80 bg-background/90 px-3 py-2 backdrop-blur shadow-lg">
-            <div className="flex items-center gap-4 text-xs">
-              <div className="flex items-center gap-1.5">
-                <Activity className="size-3.5 text-info" />
-                <span className="text-[0.625rem] font-bold uppercase tracking-wider text-muted-foreground">
-                  Belt Speed:
-                </span>
-                <span className="font-mono text-xs font-bold text-foreground">
-                  {scenario === "CRITICAL" ? "0.85 m/s (Degraded)" : "2.85 m/s"}
-                </span>
-              </div>
 
-              <div className="flex items-center gap-1.5 border-l border-border/60 pl-3">
-                <Flame className="size-3.5 text-warning" />
-                <span className="text-[0.625rem] font-bold uppercase tracking-wider text-muted-foreground">
-                  Drive Pulley Temp:
-                </span>
-                <span className="font-mono text-xs font-bold text-foreground">
-                  {scenario === "CRITICAL"
-                    ? "81.2°C (Surge!)"
-                    : scenario === "WARNING"
-                      ? "58.4°C (+20.4°C)"
-                      : "38.0°C (Nominal)"}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-1.5 border-l border-border/60 pl-3">
-                <Eye className="size-3.5 text-info" />
-                <span className="text-[0.625rem] font-bold uppercase tracking-wider text-muted-foreground">
-                  Splice Integrity:
-                </span>
-                <span className="font-mono text-xs font-bold text-foreground">
-                  {scenario === "CRITICAL" ? "31.0% (Rupture Imminent)" : scenario === "WARNING" ? "68.4% (Fatigued)" : "98.2% (Healthy)"}
-                </span>
-              </div>
-            </div>
-
-            <div className="text-[0.5625rem] font-mono text-muted-foreground">
-              [Left Click: Rotate · Right Click: Pan · Scroll: Zoom]
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
