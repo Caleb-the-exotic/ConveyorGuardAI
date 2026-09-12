@@ -70,8 +70,10 @@ export interface ComPort {
   description: string;
 }
 
-const WS_URL   = "ws://127.0.0.1:8000/ws/arduino";
-const REST_BASE = "http://127.0.0.1:8000";
+// Connects to the Render FastAPI server.
+// If the backend runs on Render, the WebSocket lives there.
+const WS_URL   = "wss://conveyorguardai.onrender.com/ws/arduino";
+const REST_BASE = "https://conveyorguardai.onrender.com";
 
 export function useArduino() {
   const [connected, setConnected]           = useState(false);

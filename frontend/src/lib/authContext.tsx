@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const initiateOtpFlow = async (authUser: AuthUser) => {
     try {
       toast.info("Sending verification code to your email...");
-      const res = await fetch("http://localhost:3001/api/auth/send-otp", {
+      const res = await fetch("https://conveyorguardai.onrender.com/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: authUser.email })
@@ -100,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const verifyOtp = async (code: string) => {
     if (!pendingUser) return;
     try {
-      const res = await fetch("http://localhost:3001/api/auth/verify-otp", {
+      const res = await fetch("https://conveyorguardai.onrender.com/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: pendingUser.email, code })

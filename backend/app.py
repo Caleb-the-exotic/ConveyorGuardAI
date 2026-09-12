@@ -1,5 +1,7 @@
 import os
 import sys
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), "node-mailer", ".env"))
 import time
 import json
 import asyncio
@@ -21,6 +23,7 @@ import uvicorn
 
 import arduino_serial
 import ai_report
+import mailer
 
 # Set current backend path
 BACKEND_DIR = Path(__file__).resolve().parent
@@ -816,6 +819,67 @@ async def api_get_latest_ai_report():
     if LATEST_AI_REPORT is None:
         return {"status": "none", "report": None}
     return {"status": "ok", "report": LATEST_AI_REPORT}
+
+
+# -------------------------------------------------------------
+# Mailer & Auth Endpoints
+# -------------------------------------------------------------
+from pydantic import BaseModel
+from fastapi import HTTPException
+
+class EmailRequest(BaseModel):
+    email: str
+
+class VerifyRequest(BaseModel):
+    email: str
+    code: str
+
+class CriticalAlertRequest(BaseModel):
+    email: str
+    defectDetails: dict
+
+class WorkOrderRequest(BaseModel):
+    email: str
+    workOrder: dict
+
+@app.post("/api/auth/send-otp")
+async def send_otp(req: EmailRequest):
+    if not req.email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    try:
+        mailer.send_otp_email(req.email)
+        return {"success": True, "message": "OTP sent successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/auth/verify-otp")
+async def verify_otp(req: VerifyRequest):
+    if not req.email or not req.code:
+        raise HTTPException(status_code=400, detail="Email and code are required")
+    if mailer.verify_otp(req.email, req.code):
+        return {"success": True}
+    else:
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP code")
+
+@app.post("/api/alerts/critical")
+async def send_critical_alert(req: CriticalAlertRequest):
+    if not req.email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    try:
+        mailer.send_critical_alert(req.email, req.defectDetails)
+        return {"success": True, "message": "Alert sent"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/alerts/work-order")
+async def send_work_order(req: WorkOrderRequest):
+    if not req.email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    try:
+        mailer.send_work_order(req.email, req.workOrder)
+        return {"success": True, "message": "Work order email sent"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

@@ -81,7 +81,7 @@ export function ExecutiveDiagnosticReport() {
         const parsed = JSON.parse(cached);
         setReportData(parsed);
       } else {
-        fetch("http://127.0.0.1:8000/api/ai/latest-report")
+        fetch("https://conveyorguardai.onrender.com/api/ai/latest-report")
           .then((res) => res.json())
           .then((data) => {
             if (data.status === "ok" && data.report) {
@@ -184,14 +184,14 @@ export function ExecutiveDiagnosticReport() {
         };
 
     try {
-      let res = await fetch("http://127.0.0.1:8000/api/ai/generate-report", {
+      let res = await fetch("https://conveyorguardai.onrender.com/api/ai/generate-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ telemetry, anomalies: reportAnomalies, image_base64: lastSnapshot }),
       }).catch(() => null);
 
       if (!res || !res.ok) {
-        res = await fetch("http://localhost:8000/api/ai/generate-report", {
+        res = await fetch("https://conveyorguardai.onrender.com/api/ai/generate-report", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ telemetry, anomalies: reportAnomalies, image_base64: lastSnapshot }),

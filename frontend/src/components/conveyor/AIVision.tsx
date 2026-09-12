@@ -127,7 +127,7 @@ export function AIVision() {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2000);
-        const res = await fetch("http://127.0.0.1:8000/health", { signal: controller.signal });
+        const res = await fetch("https://conveyorguardai.onrender.com/health", { signal: controller.signal });
         clearTimeout(timeoutId);
         if (res.ok && mounted) {
           setBackendConnected(true);
@@ -137,7 +137,7 @@ export function AIVision() {
         try {
           const controller2 = new AbortController();
           const timeoutId2 = setTimeout(() => controller2.abort(), 2000);
-          const res2 = await fetch("http://localhost:8000/health", { signal: controller2.signal });
+          const res2 = await fetch("https://conveyorguardai.onrender.com/health", { signal: controller2.signal });
           clearTimeout(timeoutId2);
           if (res2.ok && mounted) {
             setBackendConnected(true);
@@ -160,7 +160,7 @@ export function AIVision() {
   // WebSocket Connection for Live Camera Stream
   const connectWebSocket = useCallback(() => {
     try {
-      const ws = new WebSocket("ws://127.0.0.1:8000/ws/evaluate");
+      const ws = new WebSocket("wss://conveyorguardai.onrender.com/ws/evaluate");
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -338,12 +338,12 @@ export function AIVision() {
 
       let res: Response | null = null;
       try {
-        res = await fetch("http://127.0.0.1:8000/api/evaluate", {
+        res = await fetch("https://conveyorguardai.onrender.com/api/evaluate", {
           method: "POST",
           body: fd,
         });
       } catch {
-        res = await fetch("http://localhost:8000/api/evaluate", {
+        res = await fetch("https://conveyorguardai.onrender.com/api/evaluate", {
           method: "POST",
           body: fd,
         });

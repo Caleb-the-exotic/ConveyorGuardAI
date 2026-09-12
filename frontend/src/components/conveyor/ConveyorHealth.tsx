@@ -122,7 +122,7 @@ export function ConveyorHealth() {
     try {
       let res: Response | null = null;
       try {
-        res = await fetch("http://127.0.0.1:8000/api/ai/generate-report", {
+        res = await fetch("https://conveyorguardai.onrender.com/api/ai/generate-report", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -131,7 +131,7 @@ export function ConveyorHealth() {
           }),
         });
       } catch {
-        res = await fetch("http://localhost:8000/api/ai/generate-report", {
+        res = await fetch("https://conveyorguardai.onrender.com/api/ai/generate-report", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

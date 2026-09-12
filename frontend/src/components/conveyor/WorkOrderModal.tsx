@@ -134,7 +134,7 @@ export function WorkOrderModal() {
 
     // 2. Send Email if user is logged in
     if (user?.email) {
-      fetch("http://localhost:3001/api/alerts/work-order", {
+      fetch("https://conveyorguardai.onrender.com/api/alerts/work-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: user.email, workOrder: taskData }),

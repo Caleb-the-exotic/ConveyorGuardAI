@@ -37,7 +37,7 @@ export function useNotifications() {
     // Email Notification
     if (user && user.email && now - lastEmailNotification.current > EMAIL_COOLDOWN_MS) {
       try {
-        const res = await fetch("http://localhost:3001/api/alerts/critical", {
+        const res = await fetch("https://conveyorguardai.onrender.com/api/alerts/critical", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
